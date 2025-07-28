@@ -127,19 +127,20 @@ const store = createStore({
             }
         },
 
-        async logout({ commit, state }) {
-            const currentRefreshToken = state.refreshToken; // 固定当前值
-            try {
-                if (currentRefreshToken) {
-                    await axios.post('/api/auth/logout', {
-                        refreshToken: currentRefreshToken
-                    });
-                }
-            } catch (error) {
-                console.error('注销时出错:', error);
-            } finally {
-                commit('clearAuth');
-            }
+        async logout({ commit }) {
+            // const currentRefreshToken = state.refreshToken; // 固定当前值
+            // try {
+            //     if (currentRefreshToken) {
+            //         await axios.post('/api/auth/logout', {
+            //             refreshToken: currentRefreshToken
+            //         });
+            //     }
+            // } catch (error) {
+            //     console.error('注销时出错:', error);
+            // } finally {
+            //     commit('clearAuth');
+            // }
+            commit('clearAuth');
         },
 
         async refreshToken({ commit, state }) {

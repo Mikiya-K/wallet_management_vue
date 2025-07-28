@@ -73,12 +73,28 @@
               </td>
               <td>{{ (user.wallets || []).length }}</td>
               <td>
-                <button
-                  class="btn btn-sm btn-outline"
-                  @click="openUserDetail(user)"
-                >
-                  <i class="fas fa-eye"></i> 查看
-                </button>
+                <div class="action-buttons">
+                  <button
+                    class="btn btn-sm btn-outline"
+                    @click="openUserDetail(user)"
+                  >
+                    <i class="fas fa-eye"></i> 查看
+                  </button>
+                  <!-- 新增删除按钮 -->
+                  <button
+                    class="btn btn-sm btn-outline btn-danger"
+                    @click="confirmDeleteUser(user)"
+                    :disabled="isDeletingUser"
+                  >
+                    <i
+                      class="fas"
+                      :class="
+                        isDeletingUser ? 'fa-spinner fa-spin' : 'fa-trash'
+                      "
+                    ></i>
+                    删除
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -225,6 +241,56 @@
         </div>
       </div>
     </div>
+    <!-- 新增删除确认模态框 -->
+    <div
+      class="modal-overlay"
+      v-if="showDeleteConfirmation"
+      @click.self="showDeleteConfirmation = false"
+    >
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title">
+            <i class="fas fa-exclamation-triangle text-warning"></i>
+            确认删除用户
+          </h3>
+          <button class="modal-close" @click="showDeleteConfirmation = false">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <div class="error-message" v-if="deleteError">
+            <i class="fas fa-exclamation-circle"></i> {{ deleteError }}
+          </div>
+
+          <p>
+            确定要永久删除用户
+            <strong>{{ deletingUserName }}</strong> 吗？此操作不可恢复！
+          </p>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            class="btn btn-secondary"
+            @click="showDeleteConfirmation = false"
+            :disabled="isDeletingUser"
+          >
+            <i class="fas fa-times"></i> 取消
+          </button>
+          <button
+            class="btn btn-danger"
+            @click="deleteUser"
+            :disabled="isDeletingUser"
+          >
+            <i
+              class="fas"
+              :class="isDeletingUser ? 'fa-spinner fa-spin' : 'fa-trash'"
+            ></i>
+            {{ isDeletingUser ? "删除中..." : "确认删除" }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -262,6 +328,13 @@ export default {
     const editingRoles = ref([]);
     const editingWallets = ref([]);
     const availableRoles = ref(["admin", "user"]);
+
+    // 新增删除相关状态
+    const isDeletingUser = ref(false);
+    const showDeleteConfirmation = ref(false);
+    const deletingUserId = ref(null);
+    const deletingUserName = ref("");
+    const deleteError = ref("");
 
     // 修改：使用动态加载的钱包列表
     const availableWallets = ref([]);
@@ -456,6 +529,43 @@ export default {
       fetchUsers();
     };
 
+    // 新增删除用户相关方法
+    const confirmDeleteUser = (user) => {
+      deletingUserId.value = user.id;
+      deletingUserName.value = user.name;
+      deleteError.value = "";
+      showDeleteConfirmation.value = true;
+    };
+
+    const deleteUser = async () => {
+      isDeletingUser.value = true;
+      deleteError.value = "";
+
+      try {
+        // 发送DELETE请求
+        await api.delete("/users", {
+          params: {
+            username: deletingUserName.value,
+          },
+        });
+
+        // 显示成功消息
+        alert(`用户 ${deletingUserName.value} 已成功删除`);
+
+        // 刷新用户列表
+        fetchUsers();
+
+        // 关闭确认对话框
+        showDeleteConfirmation.value = false;
+      } catch (error) {
+        console.error("删除用户失败:", error);
+        deleteError.value =
+          error.response?.data?.message || "删除用户失败，请重试";
+      } finally {
+        isDeletingUser.value = false;
+      }
+    };
+
     return {
       users,
       walletsList,
@@ -474,6 +584,10 @@ export default {
       availableRoles,
       availableWallets,
       roleIcon,
+      isDeletingUser,
+      showDeleteConfirmation,
+      deletingUserName,
+      deleteError,
       fetchUsers,
       debounceSearch,
       openUserDetail,
@@ -482,6 +596,8 @@ export default {
       nextPage,
       prevPage,
       handlePageSizeChange,
+      confirmDeleteUser,
+      deleteUser,
     };
   },
 };
@@ -902,6 +1018,25 @@ export default {
 .empty-state h3 {
   font-size: 1.5rem;
   margin-bottom: 10px;
+}
+
+/* 新增样式 */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-danger {
+  color: #e53e3e;
+  border-color: #e53e3e;
+}
+
+.btn-danger:hover {
+  background-color: rgba(229, 62, 62, 0.1);
+}
+
+.text-warning {
+  color: #e53e3e;
 }
 
 @media (max-width: 768px) {
