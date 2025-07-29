@@ -352,6 +352,7 @@
 
 <script>
 import { mapActions } from "vuex";
+import { handleApiError } from "@/utils/errorHandler";
 
 export default {
   name: "RegisterForm",
@@ -579,25 +580,7 @@ export default {
         await new Promise((resolve) => setTimeout(resolve, 1500));
         this.$router.push("/login"); // 确保重定向到登录页
       } catch (error) {
-        let errorMessage = "Registration failed, please check your details";
-        if (error.response) {
-          switch (error.response.status) {
-            case 409:
-              errorMessage = "Username already exists";
-              break;
-            case 400:
-              errorMessage = "Invalid registration data";
-              break;
-            case 500:
-              errorMessage = "Server error. Please try again later";
-              break;
-            default:
-              errorMessage = error.response.data?.message || errorMessage;
-          }
-        } else if (error.request) {
-          errorMessage = "Network error. Please check your connection";
-        }
-        this.error = errorMessage;
+        this.error = handleApiError(error);
       } finally {
         clearInterval(this.progressInterval);
         this.loading = false;

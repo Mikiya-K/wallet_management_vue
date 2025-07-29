@@ -1,4 +1,5 @@
 import { createStore } from 'vuex';
+import { handleApiError } from "@/utils/errorHandler";
 import axios from 'axios';
 
 const store = createStore({
@@ -66,23 +67,8 @@ const store = createStore({
 
                 return response;
             } catch (error) {
-                // 处理注册错误
                 let errorMessage = "Registration failed, please check your details";
-                if (error.response) {
-                    switch (error.response.status) {
-                        case 409:
-                            errorMessage = "Username already exists";
-                            break;
-                        case 400:
-                            errorMessage = "Invalid registration data";
-                            break;
-                        case 500:
-                            errorMessage = "Server error. Please try again later";
-                            break;
-                    }
-                } else if (error.request) {
-                    errorMessage = "Network error. Please check your connection";
-                }
+                errorMessage = handleApiError(error);
                 throw new Error(errorMessage);
             }
         },
@@ -105,24 +91,7 @@ const store = createStore({
             } catch (error) {
                 commit('clearAuth');
                 let errorMessage = "Login failed, please check your credentials";
-                if (error.response) {
-                    switch (error.response.status) {
-                        case 401:
-                            errorMessage = "Incorrect username or password";
-                            break;
-                        case 403:
-                            errorMessage = "Account locked. Please reset your password";
-                            break;
-                        case 429:
-                            errorMessage = "Too many attempts. Please try again later";
-                            break;
-                        case 500:
-                            errorMessage = "Server error. Please try again later";
-                            break;
-                    }
-                } else if (error.request) {
-                    errorMessage = "Network error. Please check your connection";
-                }
+                errorMessage = handleApiError(error);
                 throw new Error(errorMessage);
             }
         },

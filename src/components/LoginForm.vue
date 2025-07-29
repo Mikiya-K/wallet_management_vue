@@ -280,6 +280,7 @@
 
 <script>
 import { mapActions } from "vuex";
+import { handleApiError } from "@/utils/errorHandler";
 
 export default {
   name: "LoginForm",
@@ -478,27 +479,7 @@ export default {
           this.$router.push("/wallet-management");
         }
       } catch (error) {
-        let errorMessage = "Login failed, please check your credentials";
-        if (error.response) {
-          switch (error.response.status) {
-            case 401:
-              errorMessage = "Incorrect username or password";
-              break;
-            case 403:
-              errorMessage = "Account locked. Please reset your password";
-              break;
-            case 429:
-              errorMessage = "Too many attempts. Please try again later";
-              break;
-            case 500:
-              errorMessage = "Server error. Please try again later";
-              break;
-            default:
-              errorMessage = error.response.data?.message || errorMessage;
-          }
-        } else if (error.request)
-          errorMessage = "Network error. Please check your connection";
-        this.error = errorMessage;
+        this.error = handleApiError(error);
       } finally {
         clearInterval(this.progressInterval);
         this.loading = false;
