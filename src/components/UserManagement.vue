@@ -150,32 +150,11 @@
         </div>
 
         <div class="modal-body">
-          <!-- 操作状态提示 -->
-          <transition name="fade">
-            <div v-if="updateSuccessMessage" class="success-message">
-              <span class="success-icon" aria-hidden="true">✓</span>
-              <span>{{ updateSuccessMessage }}</span>
-            </div>
-          </transition>
-
-          <transition name="fade">
-            <div v-if="updateErrorMessage" class="error-message">
-              <span class="error-icon" aria-hidden="true">❌❌</span>
-              <span>{{ updateErrorMessage }}</span>
-            </div>
-          </transition>
-
           <div class="user-detail-grid">
             <div class="detail-group">
               <span class="detail-label">用户名</span>
               <div class="detail-value">
                 {{ selectedUser.name || "未命名用户" }}
-              </div>
-            </div>
-            <div class="detail-group">
-              <span class="detail-label">用户ID</span>
-              <div class="detail-value">
-                {{ selectedUser.id ? `USR-${selectedUser.id}` : "临时用户" }}
               </div>
             </div>
           </div>
@@ -227,6 +206,21 @@
               </label>
             </div>
           </div>
+
+          <!-- 操作状态提示 -->
+          <transition name="fade">
+            <div v-if="updateSuccessMessage" class="success-message">
+              <span class="success-icon" aria-hidden="true">✓</span>
+              <span>{{ updateSuccessMessage }}</span>
+            </div>
+          </transition>
+
+          <transition name="fade">
+            <div v-if="updateErrorMessage" class="error-message">
+              <span class="error-icon" aria-hidden="true">❌❌</span>
+              <span>{{ updateErrorMessage }}</span>
+            </div>
+          </transition>
         </div>
 
         <div class="modal-footer">
@@ -904,7 +898,7 @@ export default {
 
 .user-detail-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: 20px;
   margin-bottom: 20px;
 }
@@ -969,6 +963,12 @@ export default {
 .wallet-item.selected {
   border-color: #4361ee;
   background: rgba(67, 97, 238, 0.1);
+}
+
+.modal-body > .success-message,
+.modal-body > .error-message {
+  margin-top: 20px;
+  margin-bottom: 10px;
 }
 
 .modal-footer {
