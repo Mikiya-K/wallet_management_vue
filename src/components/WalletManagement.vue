@@ -63,11 +63,7 @@
     </div>
 
     <!-- Transfer模态框 -->
-    <div
-      v-if="transferModalVisible"
-      class="modal-overlay"
-      @click.self="closeTransferModal"
-    >
+    <div v-if="transferModalVisible" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
           <h2>Transfer Funds</h2>
@@ -75,6 +71,7 @@
             class="close-btn"
             @click="closeTransferModal"
             aria-label="Close transfer modal"
+            :disabled="transferLoading"
           >
             &times;
           </button>
@@ -88,6 +85,7 @@
                 v-model="transferForm.alias"
                 required
                 @change="updateFromWalletDetails"
+                :disabled="transferLoading"
               >
                 <option
                   v-for="wallet in allWallets"
@@ -111,6 +109,7 @@
                 v-model="transferForm.to"
                 required
                 @change="updateToWalletDetails"
+                :disabled="transferLoading"
               >
                 <option
                   v-for="wallet in allWallets"
@@ -135,6 +134,7 @@
                 step="0.000001"
                 required
                 :max="selectedFromWallet ? selectedFromWallet.free : 0"
+                :disabled="transferLoading"
               />
               <div class="amount-info">
                 <p v-if="transferForm.amount > 0">
@@ -149,16 +149,45 @@
               </div>
             </div>
 
+            <!-- Transfer操作状态提示 -->
+            <transition name="fade">
+              <div v-if="transferSuccessMessage" class="success-message">
+                <span class="success-icon" aria-hidden="true">✓</span>
+                <span>{{ transferSuccessMessage }}</span>
+              </div>
+            </transition>
+
+            <transition name="fade">
+              <div v-if="transferErrorMessage" class="error-message">
+                <span class="error-icon" aria-hidden="true">❌</span>
+                <span>{{ transferErrorMessage }}</span>
+              </div>
+            </transition>
+
             <div class="form-actions">
-              <button type="button" @click="closeTransferModal">Cancel</button>
+              <button
+                type="button"
+                @click="closeTransferModal"
+                :disabled="transferLoading"
+              >
+                Cancel
+              </button>
               <button
                 type="submit"
                 :disabled="
+                  transferLoading ||
                   transferForm.amount <= 0 ||
                   transferForm.amount > (selectedFromWallet?.free || 0)
                 "
               >
-                Confirm Transfer
+                <span
+                  v-if="transferLoading"
+                  class="spinner"
+                  aria-hidden="true"
+                ></span>
+                <span>{{
+                  transferLoading ? "Processing..." : "Confirm Transfer"
+                }}</span>
               </button>
             </div>
           </form>
@@ -167,11 +196,7 @@
     </div>
 
     <!-- Remove Stake模态框 -->
-    <div
-      v-if="removeModalVisible"
-      class="modal-overlay"
-      @click.self="closeRemoveModal"
-    >
+    <div v-if="removeModalVisible" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
           <h2>Remove Stake</h2>
@@ -179,6 +204,7 @@
             class="close-btn"
             @click="closeRemoveModal"
             aria-label="Close remove stake modal"
+            :disabled="removeLoading"
           >
             &times;
           </button>
@@ -192,6 +218,7 @@
                 v-model="removeForm.wallet"
                 required
                 @change="updateSelectedWalletDetails"
+                :disabled="removeLoading"
               >
                 <option
                   v-for="wallet in allWallets"
@@ -218,6 +245,7 @@
                 step="0.000001"
                 required
                 :max="selectedWallet ? selectedWallet.staked : 0"
+                :disabled="removeLoading"
               />
               <div class="amount-info">
                 <p v-if="removeForm.amount > 0">
@@ -231,16 +259,45 @@
               </div>
             </div>
 
+            <!-- Remove Stake操作状态提示 -->
+            <transition name="fade">
+              <div v-if="removeSuccessMessage" class="success-message">
+                <span class="success-icon" aria-hidden="true">✓</span>
+                <span>{{ removeSuccessMessage }}</span>
+              </div>
+            </transition>
+
+            <transition name="fade">
+              <div v-if="removeErrorMessage" class="error-message">
+                <span class="error-icon" aria-hidden="true">❌</span>
+                <span>{{ removeErrorMessage }}</span>
+              </div>
+            </transition>
+
             <div class="form-actions">
-              <button type="button" @click="closeRemoveModal">Cancel</button>
+              <button
+                type="button"
+                @click="closeRemoveModal"
+                :disabled="removeLoading"
+              >
+                Cancel
+              </button>
               <button
                 type="submit"
                 :disabled="
+                  removeLoading ||
                   removeForm.amount <= 0 ||
                   removeForm.amount > (selectedWallet?.staked || 0)
                 "
               >
-                Confirm Removal
+                <span
+                  v-if="removeLoading"
+                  class="spinner"
+                  aria-hidden="true"
+                ></span>
+                <span>{{
+                  removeLoading ? "Processing..." : "Confirm Removal"
+                }}</span>
               </button>
             </div>
           </form>
@@ -253,6 +310,7 @@
 <script>
 import { ref, onMounted } from "vue";
 import { useStore } from "vuex";
+import { handleApiError } from "@/utils/errorHandler";
 import api from "@/utils/api";
 
 export default {
@@ -284,6 +342,16 @@ export default {
     });
     const selectedWallet = ref(null);
 
+    // 新增状态：Transfer操作相关
+    const transferLoading = ref(false);
+    const transferSuccessMessage = ref("");
+    const transferErrorMessage = ref("");
+
+    // 新增状态：Remove Stake操作相关
+    const removeLoading = ref(false);
+    const removeSuccessMessage = ref("");
+    const removeErrorMessage = ref("");
+
     // 获取所有钱包
     const fetchAllWallets = async () => {
       loading.value = true;
@@ -305,6 +373,10 @@ export default {
 
     // 打开Transfer模态框
     const openTransferModal = () => {
+      // 重置消息
+      transferSuccessMessage.value = "";
+      transferErrorMessage.value = "";
+
       if (allWallets.value.length > 0) {
         transferForm.value.alias = allWallets.value[0].coldkey_name;
         transferForm.value.to =
@@ -322,6 +394,9 @@ export default {
       transferForm.value = { alias: "", to: "", amount: 0 };
       selectedFromWallet.value = null;
       selectedToWallet.value = null;
+      // 重置消息状态
+      transferSuccessMessage.value = "";
+      transferErrorMessage.value = "";
     };
 
     // 更新选择的from钱包
@@ -344,21 +419,35 @@ export default {
 
     // 提交Transfer操作
     const submitTransfer = async () => {
+      // 重置消息
+      transferSuccessMessage.value = "";
+      transferErrorMessage.value = "";
+      transferLoading.value = true;
+
+      var transferFlag = false;
       try {
         await api.post("/wallets", transferForm.value, {});
-        closeTransferModal();
-        fetchAllWallets();
-        alert("Transfer completed successfully");
+        transferSuccessMessage.value = "Transfer completed successfully";
+        transferFlag = true;
+        setTimeout(() => {
+          closeTransferModal();
+        }, 1500);
       } catch (error) {
-        console.error("Transfer failed:", error);
-        alert(
-          `Transfer failed: ${error.response?.data?.message || error.message}`
-        );
+        transferErrorMessage.value = handleApiError(error);
+      } finally {
+        if (transferFlag) {
+          fetchAllWallets();
+        }
+        transferLoading.value = false;
       }
     };
 
     // 打开Remove Stake模态框
     const openRemoveModal = () => {
+      // 重置消息
+      removeSuccessMessage.value = "";
+      removeErrorMessage.value = "";
+
       if (allWallets.value.length > 0) {
         removeForm.value.wallet = allWallets.value[0].coldkey_name;
         selectedWallet.value = allWallets.value[0];
@@ -371,6 +460,9 @@ export default {
       removeModalVisible.value = false;
       removeForm.value = { wallet: "", amount: 0 };
       selectedWallet.value = null;
+      // 重置消息状态
+      removeSuccessMessage.value = "";
+      removeErrorMessage.value = "";
     };
 
     // 更新选择的钱包
@@ -384,6 +476,12 @@ export default {
 
     // 提交Remove Stake操作
     const submitRemoveStake = async () => {
+      // 重置消息
+      removeSuccessMessage.value = "";
+      removeErrorMessage.value = "";
+      removeLoading.value = true;
+
+      var removeStakeFlag = false;
       try {
         await api.put(
           "/wallets",
@@ -393,16 +491,18 @@ export default {
           },
           {}
         );
-        closeRemoveModal();
-        fetchAllWallets();
-        alert("Stake removed completed successfully");
+        removeSuccessMessage.value = "Stake removed successfully";
+        removeStakeFlag = true;
+        setTimeout(() => {
+          closeRemoveModal();
+        }, 1500);
       } catch (error) {
-        console.error("Stake removal failed:", error);
-        alert(
-          `Stake removal failed: ${
-            error.response?.data?.message || error.message
-          }`
-        );
+        removeErrorMessage.value = handleApiError(error);
+      } finally {
+        if (removeStakeFlag) {
+          fetchAllWallets();
+        }
+        removeLoading.value = false;
       }
     };
 
@@ -429,6 +529,12 @@ export default {
       selectedFromWallet,
       selectedToWallet,
       selectedWallet,
+      transferLoading,
+      transferSuccessMessage,
+      transferErrorMessage,
+      removeLoading,
+      removeSuccessMessage,
+      removeErrorMessage,
       openTransferModal,
       closeTransferModal,
       openRemoveModal,
@@ -519,7 +625,7 @@ export default {
   padding: 40px;
 }
 
-.spinner {
+.loading-indicator .spinner {
   border: 4px solid rgba(0, 0, 0, 0.1);
   border-left-color: #3498db;
   border-radius: 50%;
@@ -578,67 +684,6 @@ export default {
 .balance-cell.total {
   font-weight: 600;
   color: #27ae60;
-}
-
-.pagination-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 15px;
-  padding: 15px;
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-}
-
-.pagination-info {
-  color: #7f8c8d;
-  font-size: 14px;
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.pagination-controls button {
-  padding: 8px 15px;
-  border: 1px solid #e0e6ed;
-  border-radius: 4px;
-  background-color: white;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.pagination-controls button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.pagination-controls button:not(:disabled):hover {
-  background-color: #f8f9fa;
-  border-color: #3498db;
-  color: #3498db;
-}
-
-.per-page-selector {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.per-page-selector label {
-  font-size: 14px;
-  color: #7f8c8d;
-}
-
-.per-page-selector select {
-  padding: 8px;
-  border: 1px solid #e0e6ed;
-  border-radius: 4px;
-  background-color: white;
 }
 
 /* Modal styles */
@@ -752,6 +797,9 @@ export default {
   font-weight: 600;
   cursor: pointer;
   font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .form-actions button:first-child {
@@ -775,6 +823,65 @@ export default {
   background: linear-gradient(135deg, #27ae60, #219653);
 }
 
+/* 新增样式 - 操作状态提示 */
+.success-message {
+  color: #2ecc71;
+  font-size: 0.9rem;
+  margin-top: 1.5rem;
+  padding: 12px 15px;
+  background: rgba(46, 204, 113, 0.1);
+  border-radius: 8px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.error-message {
+  color: #e74c3c;
+  font-size: 0.9rem;
+  margin-top: 1.5rem;
+  padding: 12px 15px;
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: 8px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* 按钮中的加载指示器 */
+.spinner {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s;
+}
+.fade-enter,
+.fade-leave-to {
+  opacity: 0;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .header-section {
@@ -786,11 +893,6 @@ export default {
   .action-buttons {
     width: 100%;
     flex-direction: column;
-  }
-
-  .pagination-container {
-    flex-direction: column;
-    align-items: flex-start;
   }
 
   .wallet-table {
@@ -810,17 +912,6 @@ export default {
 @media (max-width: 480px) {
   .modal-content {
     width: 95%;
-  }
-
-  .pagination-controls {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .pagination-controls span {
-    width: 100%;
-    text-align: center;
-    margin: 10px 0;
   }
 }
 </style>

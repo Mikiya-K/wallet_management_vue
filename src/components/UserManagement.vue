@@ -138,7 +138,7 @@
     </div>
 
     <!-- 用户详情模态框 -->
-    <div class="modal-overlay" v-if="showModal" @click.self="closeModal">
+    <div class="modal-overlay" v-if="showModal">
       <div class="modal-content">
         <div class="modal-header">
           <h3 class="modal-title">
