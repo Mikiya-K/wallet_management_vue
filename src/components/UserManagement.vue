@@ -80,7 +80,6 @@
                   >
                     <i class="fas fa-eye"></i> 查看
                   </button>
-                  <!-- 新增删除按钮 -->
                   <button
                     class="btn btn-sm btn-outline btn-danger"
                     @click="confirmDeleteUser(user)"
@@ -151,9 +150,20 @@
         </div>
 
         <div class="modal-body">
-          <div class="error-message" v-if="updateError">
-            <i class="fas fa-exclamation-circle"></i> {{ updateError }}
-          </div>
+          <!-- 操作状态提示 -->
+          <transition name="fade">
+            <div v-if="updateSuccessMessage" class="success-message">
+              <span class="success-icon" aria-hidden="true">✓</span>
+              <span>{{ updateSuccessMessage }}</span>
+            </div>
+          </transition>
+
+          <transition name="fade">
+            <div v-if="updateErrorMessage" class="error-message">
+              <span class="error-icon" aria-hidden="true">❌❌</span>
+              <span>{{ updateErrorMessage }}</span>
+            </div>
+          </transition>
 
           <div class="user-detail-grid">
             <div class="detail-group">
@@ -232,16 +242,15 @@
             @click="updateUser"
             :disabled="isUpdating"
           >
-            <i
-              class="fas"
-              :class="isUpdating ? 'fa-spinner fa-spin' : 'fa-save'"
-            ></i>
-            {{ isUpdating ? "更新中..." : "保存更改" }}
+            <span v-if="isUpdating" class="spinner" aria-hidden="true"></span>
+            <i v-if="!isUpdating" class="fas fa-save"></i>
+            {{ isUpdating ? "Processing..." : "保存更改" }}
           </button>
         </div>
       </div>
     </div>
-    <!-- 新增删除确认模态框 -->
+
+    <!-- 删除确认模态框 -->
     <div
       class="modal-overlay"
       v-if="showDeleteConfirmation"
@@ -297,6 +306,7 @@
 <script>
 import { ref, computed, onMounted } from "vue";
 import { useStore } from "vuex";
+import { handleApiError } from "@/utils/errorHandler";
 import api from "@/utils/api";
 
 export default {
@@ -313,7 +323,11 @@ export default {
     const searchQuery = ref("");
     const searchTimeout = ref(null);
 
-    // 新增：钱包列表状态
+    // 新增状态变量
+    const updateSuccessMessage = ref("");
+    const updateErrorMessage = ref("");
+
+    // 钱包列表状态
     const walletsList = ref([]);
     const isLoadingWallets = ref(false);
 
@@ -329,14 +343,14 @@ export default {
     const editingWallets = ref([]);
     const availableRoles = ref(["admin", "user"]);
 
-    // 新增删除相关状态
+    // 删除相关状态
     const isDeletingUser = ref(false);
     const showDeleteConfirmation = ref(false);
     const deletingUserId = ref(null);
     const deletingUserName = ref("");
     const deleteError = ref("");
 
-    // 修改：使用动态加载的钱包列表
+    // 使用动态加载的钱包列表
     const availableWallets = ref([]);
 
     // 计算属性 - 角色图标
@@ -360,11 +374,10 @@ export default {
         return;
       }
       fetchUsers();
-      // 新增：获取钱包列表
       fetchWallets();
     });
 
-    // 新增：获取钱包列表方法
+    // 获取钱包列表方法
     const fetchWallets = async () => {
       isLoadingWallets.value = true;
       const timestamp = Date.now();
@@ -388,9 +401,7 @@ export default {
         walletsList.value = uniqueWallets;
         availableWallets.value = uniqueWallets;
       } catch (error) {
-        console.error("获取钱包列表失败:", error);
-        availableWallets.value = []; // 清空钱包列表
-        // 错误处理
+        availableWallets.value = [];
         if (error.response?.status === 401) {
           alert("会话已过期，请重新登录");
           store.dispatch("logout");
@@ -416,9 +427,7 @@ export default {
           },
         });
 
-        // 修复：正确获取用户数组
         users.value = response.data.users || [];
-
         console.log("用户数据:", users.value);
 
         // 解析分页头信息
@@ -430,7 +439,6 @@ export default {
         }
       } catch (error) {
         console.error("获取用户列表失败:", error);
-        // 错误处理
         if (error.response?.status === 401) {
           alert("会话已过期，请重新登录");
           store.dispatch("logout");
@@ -455,7 +463,6 @@ export default {
     const openUserDetail = (user) => {
       selectedUser.value = {
         ...user,
-        // 确保 roles 和 wallets 是数组
         roles: user.roles || [],
         wallets: user.wallets || [],
       };
@@ -466,6 +473,9 @@ export default {
 
       showModal.value = true;
       updateError.value = "";
+      // 重置消息
+      updateSuccessMessage.value = "";
+      updateErrorMessage.value = "";
     };
 
     // 方法 - 关闭模态框
@@ -479,30 +489,31 @@ export default {
     // 方法 - 更新用户信息
     const updateUser = async () => {
       isUpdating.value = true;
-      updateError.value = "";
+      // 重置消息
+      updateSuccessMessage.value = "";
+      updateErrorMessage.value = "";
 
+      var updateFlag = false;
       try {
-        // 构建符合后端要求的请求体
         const payload = {
           username: selectedUser.value.name,
           roles: editingRoles.value,
           wallets: editingWallets.value,
         };
 
-        // 发送更新请求
         await api.put("/users", payload);
 
-        // 更新成功后关闭模态框
-        showModal.value = false;
-
-        // 刷新用户数据
-        fetchUsers();
-        alert("User updated successfully");
+        updateSuccessMessage.value = "User updated successfully!";
+        updateFlag = true;
+        setTimeout(() => {
+          closeModal();
+        }, 1500);
       } catch (error) {
-        console.error("User updated failed:", error);
-        updateError.value =
-          error.response?.data?.message || "User updated failed";
+        updateErrorMessage.value = handleApiError(error);
       } finally {
+        if (updateFlag) {
+          fetchUsers();
+        }
         isUpdating.value = false;
       }
     };
@@ -529,7 +540,7 @@ export default {
       fetchUsers();
     };
 
-    // 新增删除用户相关方法
+    // 删除用户相关方法
     const confirmDeleteUser = (user) => {
       deletingUserId.value = user.id;
       deletingUserName.value = user.name;
@@ -542,20 +553,14 @@ export default {
       deleteError.value = "";
 
       try {
-        // 发送DELETE请求
         await api.delete("/users", {
           params: {
             username: deletingUserName.value,
           },
         });
 
-        // 显示成功消息
         alert(`用户 ${deletingUserName.value} 已成功删除`);
-
-        // 刷新用户列表
         fetchUsers();
-
-        // 关闭确认对话框
         showDeleteConfirmation.value = false;
       } catch (error) {
         console.error("删除用户失败:", error);
@@ -588,6 +593,9 @@ export default {
       showDeleteConfirmation,
       deletingUserName,
       deleteError,
+      // 新增状态变量
+      updateSuccessMessage,
+      updateErrorMessage,
       fetchUsers,
       debounceSearch,
       openUserDetail,
@@ -993,16 +1001,6 @@ export default {
   }
 }
 
-.error-message {
-  background: #fff8f8;
-  color: #e53e3e;
-  padding: 12px;
-  border-radius: 8px;
-  border-left: 4px solid #e53e3e;
-  margin-bottom: 20px;
-  font-weight: 500;
-}
-
 .empty-state {
   text-align: center;
   padding: 40px 20px;
@@ -1027,16 +1025,75 @@ export default {
 }
 
 .btn-danger {
-  color: #e53e3e;
-  border-color: #e53e3e;
+  color: #e53e3c;
+  border-color: #e53e3c;
 }
 
 .btn-danger:hover {
-  background-color: rgba(229, 62, 62, 0.1);
+  background-color: rgba(229, 62, 60, 0.1);
 }
 
 .text-warning {
-  color: #e53e3e;
+  color: #e53e3c;
+}
+
+/* 新增样式 - 操作状态提示 */
+.success-message {
+  color: #2ecc71;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+  padding: 12px 15px;
+  background: rgba(46, 204, 113, 0.1);
+  border-radius: 8px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.error-message {
+  color: #e74c3c;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+  padding: 12px 15px;
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: 8px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* 按钮中的加载指示器 */
+.spinner {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s;
+}
+.fade-enter,
+.fade-leave-to {
+  opacity: 0;
 }
 
 @media (max-width: 768px) {
