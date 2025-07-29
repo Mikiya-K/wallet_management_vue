@@ -896,17 +896,6 @@ export default {
   padding: 20px;
 }
 
-.user-detail-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-.detail-group {
-  margin-bottom: 20px;
-}
-
 .detail-label {
   display: block;
   margin-bottom: 8px;
@@ -922,13 +911,16 @@ export default {
   font-weight: 500;
 }
 
-.edit-section {
+.edit-section,
+.user-detail-grid .detail-group {
   background: #f8f9fa;
   border-radius: 8px;
   padding: 15px;
   margin-bottom: 20px;
+  width: 100%; /* 确保所有部分宽度相同 */
 }
 
+/* 调整标题和内容间距 */
 .edit-title {
   font-size: 1.1rem;
   font-weight: 600;
