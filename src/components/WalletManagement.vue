@@ -53,6 +53,23 @@
                 </td>
               </tr>
             </tbody>
+            <!-- 合计行 -->
+            <tfoot v-if="allWallets.length > 0">
+              <tr class="summary-row">
+                <td class="summary-label" colspan="2">
+                  <strong>Total ({{ allWallets.length }} wallets)</strong>
+                </td>
+                <td class="balance-cell summary-balance">
+                  <strong>{{ formatBalance(totalSums.totalFree) }}</strong>
+                </td>
+                <td class="balance-cell summary-balance">
+                  <strong>{{ formatBalance(totalSums.totalStaked) }}</strong>
+                </td>
+                <td class="balance-cell summary-balance total">
+                  <strong>{{ formatBalance(totalSums.totalBalance) }}</strong>
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
 
@@ -308,7 +325,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { useStore } from "vuex";
 import { handleApiError } from "@/utils/errorHandler";
 import api from "@/utils/api";
@@ -506,6 +523,31 @@ export default {
       }
     };
 
+    // 计算各列总和
+    const totalSums = computed(() => {
+      if (!allWallets.value || allWallets.value.length === 0) {
+        return {
+          totalFree: 0,
+          totalStaked: 0,
+          totalBalance: 0,
+        };
+      }
+
+      return allWallets.value.reduce(
+        (sums, wallet) => {
+          sums.totalFree += parseFloat(wallet.free || 0);
+          sums.totalStaked += parseFloat(wallet.staked || 0);
+          sums.totalBalance += parseFloat(wallet.total || 0);
+          return sums;
+        },
+        {
+          totalFree: 0,
+          totalStaked: 0,
+          totalBalance: 0,
+        }
+      );
+    });
+
     // 格式化余额显示
     const formatBalance = (balance) => {
       return parseFloat(balance).toFixed(6) + " TAO";
@@ -535,6 +577,7 @@ export default {
       removeLoading,
       removeSuccessMessage,
       removeErrorMessage,
+      totalSums,
       openTransferModal,
       closeTransferModal,
       openRemoveModal,
@@ -684,6 +727,37 @@ export default {
 .balance-cell.total {
   font-weight: 600;
   color: #27ae60;
+}
+
+/* 合计行样式 */
+.summary-row {
+  background-color: #f8f9fa;
+  border-top: 2px solid #3498db;
+}
+
+.summary-row td {
+  padding: 16px 15px;
+  border-bottom: 2px solid #3498db;
+  font-size: 16px;
+}
+
+.summary-label {
+  color: #2c3e50;
+  font-weight: 600;
+  background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+}
+
+.summary-balance {
+  background-color: #f1f8ff;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.summary-balance.total {
+  background: linear-gradient(135deg, #e8f5e8, #d4edda);
+  color: #155724;
+  font-weight: 700;
+  font-size: 17px;
 }
 
 /* Modal styles */
@@ -898,6 +972,15 @@ export default {
   .wallet-table {
     display: block;
     overflow-x: auto;
+  }
+
+  .summary-row td {
+    padding: 12px 10px;
+    font-size: 14px;
+  }
+
+  .summary-balance.total {
+    font-size: 15px;
   }
 
   .form-actions {
