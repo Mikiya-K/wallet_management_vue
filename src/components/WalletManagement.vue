@@ -22,7 +22,7 @@
 
       <div v-else>
         <div class="wallet-count-info">
-          Showing all {{ allWallets.length }} wallets
+          Showing all {{ sortedWallets.length }} wallets
         </div>
 
         <div class="table-scroll-container">
@@ -35,7 +35,25 @@
             </caption>
             <thead>
               <tr>
-                <th scope="col">Coldkey Name</th>
+                <th scope="col" class="sortable-header">
+                  <button
+                    class="sort-button"
+                    @click="toggleSort('coldkey_name')"
+                    :class="{
+                      'sort-active': sortField === 'coldkey_name',
+                      'sort-asc':
+                        sortField === 'coldkey_name' && sortDirection === 'asc',
+                      'sort-desc':
+                        sortField === 'coldkey_name' &&
+                        sortDirection === 'desc',
+                    }"
+                  >
+                    Coldkey Name
+                    <span class="sort-icon">{{
+                      getSortIcon("coldkey_name")
+                    }}</span>
+                  </button>
+                </th>
                 <th scope="col">Coldkey Address</th>
                 <th scope="col">Free Balance</th>
                 <th scope="col">Staked Balance</th>
@@ -43,7 +61,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="wallet in allWallets" :key="wallet.coldkey_name">
+              <tr v-for="wallet in sortedWallets" :key="wallet.coldkey_name">
                 <td>{{ wallet.coldkey_name }}</td>
                 <td class="address-cell">{{ wallet.coldkey_address }}</td>
                 <td class="balance-cell">{{ formatBalance(wallet.free) }}</td>
@@ -54,10 +72,10 @@
               </tr>
             </tbody>
             <!-- 合计行 -->
-            <tfoot v-if="allWallets.length > 0">
+            <tfoot v-if="sortedWallets.length > 0">
               <tr class="summary-row">
                 <td class="summary-label" colspan="2">
-                  <strong>Total ({{ allWallets.length }} wallets)</strong>
+                  <strong>Total ({{ sortedWallets.length }} wallets)</strong>
                 </td>
                 <td class="balance-cell summary-balance">
                   <strong>{{ formatBalance(totalSums.totalFree) }}</strong>
@@ -73,7 +91,7 @@
           </table>
         </div>
 
-        <div v-if="allWallets.length === 0" class="no-data">
+        <div v-if="sortedWallets.length === 0" class="no-data">
           <p>No wallet data available</p>
         </div>
       </div>
@@ -105,7 +123,7 @@
                 :disabled="transferLoading"
               >
                 <option
-                  v-for="wallet in allWallets"
+                  v-for="wallet in sortedWallets"
                   :key="'from-' + wallet.coldkey_name"
                   :value="wallet.coldkey_name"
                 >
@@ -129,7 +147,7 @@
                 :disabled="transferLoading"
               >
                 <option
-                  v-for="wallet in allWallets"
+                  v-for="wallet in sortedWallets"
                   :key="'to-' + wallet.coldkey_name"
                   :value="wallet.coldkey_name"
                 >
@@ -238,7 +256,7 @@
                 :disabled="removeLoading"
               >
                 <option
-                  v-for="wallet in allWallets"
+                  v-for="wallet in sortedWallets"
                   :key="'remove-' + wallet.coldkey_name"
                   :value="wallet.coldkey_name"
                 >
@@ -339,6 +357,10 @@ export default {
     const allWallets = ref([]);
     const loading = ref(true);
 
+    // 排序状态
+    const sortField = ref("coldkey_name"); // 默认按coldkey_name排序
+    const sortDirection = ref("asc"); // 'asc' | 'desc' | null
+
     // 模态框状态
     const transferModalVisible = ref(false);
     const removeModalVisible = ref(false);
@@ -394,13 +416,15 @@ export default {
       transferSuccessMessage.value = "";
       transferErrorMessage.value = "";
 
-      if (allWallets.value.length > 0) {
-        transferForm.value.alias = allWallets.value[0].coldkey_name;
+      if (sortedWallets.value.length > 0) {
+        transferForm.value.alias = sortedWallets.value[0].coldkey_name;
         transferForm.value.to =
-          allWallets.value.length > 1 ? allWallets.value[1].coldkey_name : "";
-        selectedFromWallet.value = allWallets.value[0];
+          sortedWallets.value.length > 1
+            ? sortedWallets.value[1].coldkey_name
+            : "";
+        selectedFromWallet.value = sortedWallets.value[0];
         selectedToWallet.value =
-          allWallets.value.length > 1 ? allWallets.value[1] : null;
+          sortedWallets.value.length > 1 ? sortedWallets.value[1] : null;
       }
       transferModalVisible.value = true;
     };
@@ -419,7 +443,7 @@ export default {
     // 更新选择的from钱包
     const updateFromWalletDetails = () => {
       if (transferForm.value.alias) {
-        selectedFromWallet.value = allWallets.value.find(
+        selectedFromWallet.value = sortedWallets.value.find(
           (w) => w.coldkey_name === transferForm.value.alias
         );
       }
@@ -428,7 +452,7 @@ export default {
     // 更新选择的to钱包
     const updateToWalletDetails = () => {
       if (transferForm.value.to) {
-        selectedToWallet.value = allWallets.value.find(
+        selectedToWallet.value = sortedWallets.value.find(
           (w) => w.coldkey_name === transferForm.value.to
         );
       }
@@ -465,9 +489,9 @@ export default {
       removeSuccessMessage.value = "";
       removeErrorMessage.value = "";
 
-      if (allWallets.value.length > 0) {
-        removeForm.value.wallet = allWallets.value[0].coldkey_name;
-        selectedWallet.value = allWallets.value[0];
+      if (sortedWallets.value.length > 0) {
+        removeForm.value.wallet = sortedWallets.value[0].coldkey_name;
+        selectedWallet.value = sortedWallets.value[0];
       }
       removeModalVisible.value = true;
     };
@@ -485,7 +509,7 @@ export default {
     // 更新选择的钱包
     const updateSelectedWalletDetails = () => {
       if (removeForm.value.wallet) {
-        selectedWallet.value = allWallets.value.find(
+        selectedWallet.value = sortedWallets.value.find(
           (w) => w.coldkey_name === removeForm.value.wallet
         );
       }
@@ -523,9 +547,33 @@ export default {
       }
     };
 
-    // 计算各列总和
-    const totalSums = computed(() => {
+    // 排序后的钱包数据
+    const sortedWallets = computed(() => {
       if (!allWallets.value || allWallets.value.length === 0) {
+        return [];
+      }
+
+      const walletsCopy = [...allWallets.value];
+
+      if (sortField.value === "coldkey_name") {
+        walletsCopy.sort((a, b) => {
+          const nameA = (a.coldkey_name || "").toLowerCase();
+          const nameB = (b.coldkey_name || "").toLowerCase();
+
+          if (sortDirection.value === "asc") {
+            return nameA.localeCompare(nameB);
+          } else {
+            return nameB.localeCompare(nameA);
+          }
+        });
+      }
+
+      return walletsCopy;
+    });
+
+    // 计算各列总和 (基于排序后的数据)
+    const totalSums = computed(() => {
+      if (!sortedWallets.value || sortedWallets.value.length === 0) {
         return {
           totalFree: 0,
           totalStaked: 0,
@@ -533,7 +581,7 @@ export default {
         };
       }
 
-      return allWallets.value.reduce(
+      return sortedWallets.value.reduce(
         (sums, wallet) => {
           sums.totalFree += parseFloat(wallet.free || 0);
           sums.totalStaked += parseFloat(wallet.staked || 0);
@@ -547,6 +595,26 @@ export default {
         }
       );
     });
+
+    // 排序切换函数
+    const toggleSort = (field) => {
+      if (sortField.value === field) {
+        // 如果点击的是当前排序字段，在升序和降序之间切换
+        sortDirection.value = sortDirection.value === "asc" ? "desc" : "asc";
+      } else {
+        // 如果点击的是新字段，设置为升序
+        sortField.value = field;
+        sortDirection.value = "asc";
+      }
+    };
+
+    // 获取排序图标
+    const getSortIcon = (field) => {
+      if (sortField.value !== field) {
+        return "↕️"; // 默认双向箭头
+      }
+      return sortDirection.value === "asc" ? "↑" : "↓";
+    };
 
     // 格式化余额显示
     const formatBalance = (balance) => {
@@ -563,6 +631,7 @@ export default {
 
     return {
       allWallets,
+      sortedWallets,
       loading,
       transferModalVisible,
       removeModalVisible,
@@ -578,6 +647,10 @@ export default {
       removeSuccessMessage,
       removeErrorMessage,
       totalSums,
+      sortField,
+      sortDirection,
+      toggleSort,
+      getSortIcon,
       openTransferModal,
       closeTransferModal,
       openRemoveModal,
@@ -702,6 +775,58 @@ export default {
   font-weight: 600;
   color: #2c3e50;
   border-bottom: 2px solid #e0e6ed;
+}
+
+/* 可排序表头样式 */
+.sortable-header {
+  padding: 0 !important;
+}
+
+.sort-button {
+  width: 100%;
+  padding: 16px 15px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-weight: 600;
+  color: #2c3e50;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.sort-button:hover {
+  background-color: #e9ecef;
+  color: #1a252f;
+}
+
+.sort-button.sort-active {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.sort-button.sort-active:hover {
+  background-color: #bbdefb;
+}
+
+.sort-icon {
+  margin-left: 8px;
+  font-size: 12px;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.sort-button:hover .sort-icon {
+  opacity: 1;
+}
+
+.sort-button.sort-active .sort-icon {
+  opacity: 1;
+  color: #1976d2;
+  font-weight: bold;
 }
 
 .wallet-table td {
@@ -981,6 +1106,15 @@ export default {
 
   .summary-balance.total {
     font-size: 15px;
+  }
+
+  .sort-button {
+    padding: 12px 10px;
+    font-size: 13px;
+  }
+
+  .sort-icon {
+    font-size: 11px;
   }
 
   .form-actions {
