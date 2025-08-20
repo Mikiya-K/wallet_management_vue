@@ -115,22 +115,92 @@
           <form @submit.prevent="submitTransfer">
             <div class="form-group">
               <label for="fromWallet">From Wallet:</label>
-              <select
-                id="fromWallet"
-                v-model="transferForm.alias"
-                required
-                @change="updateFromWalletDetails"
-                :disabled="transferLoading"
-              >
-                <option
-                  v-for="wallet in sortedWallets"
-                  :key="'from-' + wallet.coldkey_name"
-                  :value="wallet.coldkey_name"
+              <div class="wallet-search-container">
+                <input
+                  type="text"
+                  id="fromWallet"
+                  v-model="fromWalletSearch"
+                  :placeholder="`Search from ${sortedWallets.length} wallets...`"
+                  @focus="fromWalletDropdownOpen = true"
+                  @input="fromWalletDropdownOpen = true"
+                  :disabled="transferLoading"
+                  class="wallet-search-input"
+                  autocomplete="off"
+                />
+                <button
+                  v-if="fromWalletSearch"
+                  type="button"
+                  @click="clearFromWalletSearch"
+                  class="clear-search-btn"
+                  :disabled="transferLoading"
                 >
-                  {{ wallet.coldkey_name }} ({{ formatBalance(wallet.free) }}
-                  available)
-                </option>
-              </select>
+                  ×
+                </button>
+
+                <!-- 下拉搜索结果 -->
+                <div
+                  v-if="
+                    fromWalletDropdownOpen && filteredFromWallets.length > 0
+                  "
+                  class="wallet-dropdown"
+                >
+                  <div
+                    v-for="wallet in filteredFromWallets"
+                    :key="'from-' + wallet.coldkey_name"
+                    @click="selectFromWallet(wallet)"
+                    class="wallet-option"
+                    :class="{
+                      selected: transferForm.alias === wallet.coldkey_name,
+                    }"
+                  >
+                    <div class="wallet-name">{{ wallet.coldkey_name }}</div>
+                    <div class="wallet-balance">
+                      {{ formatBalance(wallet.free) }} available
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 无搜索结果 -->
+                <div
+                  v-if="
+                    fromWalletDropdownOpen &&
+                    fromWalletSearch &&
+                    filteredFromWallets.length === 0
+                  "
+                  class="wallet-dropdown no-results"
+                >
+                  <div class="wallet-option disabled">
+                    No wallets found matching "{{ fromWalletSearch }}"
+                  </div>
+                </div>
+              </div>
+
+              <!-- 快速选择区域 -->
+              <div
+                v-if="!fromWalletSearch && sortedWallets.length > 0"
+                class="quick-select"
+              >
+                <span class="quick-select-label">Quick select:</span>
+                <div class="quick-select-buttons">
+                  <button
+                    v-for="wallet in sortedWallets.slice(0, 3)"
+                    :key="'quick-from-' + wallet.coldkey_name"
+                    type="button"
+                    @click="selectFromWallet(wallet)"
+                    class="quick-select-btn"
+                    :disabled="transferLoading"
+                  >
+                    {{ wallet.coldkey_name }}
+                    <span class="quick-select-balance"
+                      >({{ formatBalance(wallet.free) }})</span
+                    >
+                  </button>
+                  <span v-if="sortedWallets.length > 3" class="more-wallets">
+                    +{{ sortedWallets.length - 3 }} more...
+                  </span>
+                </div>
+              </div>
+
               <div v-if="selectedFromWallet" class="wallet-details">
                 <p>Address: {{ selectedFromWallet.coldkey_address }}</p>
                 <p>Available: {{ formatBalance(selectedFromWallet.free) }}</p>
@@ -139,21 +209,87 @@
 
             <div class="form-group">
               <label for="toWallet">To Wallet:</label>
-              <select
-                id="toWallet"
-                v-model="transferForm.to"
-                required
-                @change="updateToWalletDetails"
-                :disabled="transferLoading"
-              >
-                <option
-                  v-for="wallet in sortedWallets"
-                  :key="'to-' + wallet.coldkey_name"
-                  :value="wallet.coldkey_name"
+              <div class="wallet-search-container">
+                <input
+                  type="text"
+                  id="toWallet"
+                  v-model="toWalletSearch"
+                  :placeholder="`Search from ${sortedWallets.length} wallets...`"
+                  @focus="toWalletDropdownOpen = true"
+                  @input="toWalletDropdownOpen = true"
+                  :disabled="transferLoading"
+                  class="wallet-search-input"
+                  autocomplete="off"
+                />
+                <button
+                  v-if="toWalletSearch"
+                  type="button"
+                  @click="clearToWalletSearch"
+                  class="clear-search-btn"
+                  :disabled="transferLoading"
                 >
-                  {{ wallet.coldkey_name }}
-                </option>
-              </select>
+                  ×
+                </button>
+
+                <!-- 下拉搜索结果 -->
+                <div
+                  v-if="toWalletDropdownOpen && filteredToWallets.length > 0"
+                  class="wallet-dropdown"
+                >
+                  <div
+                    v-for="wallet in filteredToWallets"
+                    :key="'to-' + wallet.coldkey_name"
+                    @click="selectToWallet(wallet)"
+                    class="wallet-option"
+                    :class="{
+                      selected: transferForm.to === wallet.coldkey_name,
+                    }"
+                  >
+                    <div class="wallet-name">{{ wallet.coldkey_name }}</div>
+                    <div class="wallet-balance">
+                      {{ formatBalance(wallet.free) }} available
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 无搜索结果 -->
+                <div
+                  v-if="
+                    toWalletDropdownOpen &&
+                    toWalletSearch &&
+                    filteredToWallets.length === 0
+                  "
+                  class="wallet-dropdown no-results"
+                >
+                  <div class="wallet-option disabled">
+                    No wallets found matching "{{ toWalletSearch }}"
+                  </div>
+                </div>
+              </div>
+
+              <!-- 快速选择区域 -->
+              <div
+                v-if="!toWalletSearch && sortedWallets.length > 0"
+                class="quick-select"
+              >
+                <span class="quick-select-label">Quick select:</span>
+                <div class="quick-select-buttons">
+                  <button
+                    v-for="wallet in sortedWallets.slice(0, 3)"
+                    :key="'quick-to-' + wallet.coldkey_name"
+                    type="button"
+                    @click="selectToWallet(wallet)"
+                    class="quick-select-btn"
+                    :disabled="transferLoading"
+                  >
+                    {{ wallet.coldkey_name }}
+                  </button>
+                  <span v-if="sortedWallets.length > 3" class="more-wallets">
+                    +{{ sortedWallets.length - 3 }} more...
+                  </span>
+                </div>
+              </div>
+
               <div v-if="selectedToWallet" class="wallet-details">
                 <p>Address: {{ selectedToWallet.coldkey_address }}</p>
               </div>
@@ -248,22 +384,92 @@
           <form @submit.prevent="submitRemoveStake">
             <div class="form-group">
               <label for="wallet">Select Wallet:</label>
-              <select
-                id="wallet"
-                v-model="removeForm.wallet"
-                required
-                @change="updateSelectedWalletDetails"
-                :disabled="removeLoading"
-              >
-                <option
-                  v-for="wallet in sortedWallets"
-                  :key="'remove-' + wallet.coldkey_name"
-                  :value="wallet.coldkey_name"
+              <div class="wallet-search-container">
+                <input
+                  type="text"
+                  id="wallet"
+                  v-model="removeWalletSearch"
+                  :placeholder="`Search from ${sortedWallets.length} wallets...`"
+                  @focus="removeWalletDropdownOpen = true"
+                  @input="removeWalletDropdownOpen = true"
+                  :disabled="removeLoading"
+                  class="wallet-search-input"
+                  autocomplete="off"
+                />
+                <button
+                  v-if="removeWalletSearch"
+                  type="button"
+                  @click="clearRemoveWalletSearch"
+                  class="clear-search-btn"
+                  :disabled="removeLoading"
                 >
-                  {{ wallet.coldkey_name }} ({{ formatBalance(wallet.staked) }}
-                  staked)
-                </option>
-              </select>
+                  ×
+                </button>
+
+                <!-- 下拉搜索结果 -->
+                <div
+                  v-if="
+                    removeWalletDropdownOpen && filteredRemoveWallets.length > 0
+                  "
+                  class="wallet-dropdown"
+                >
+                  <div
+                    v-for="wallet in filteredRemoveWallets"
+                    :key="'remove-' + wallet.coldkey_name"
+                    @click="selectRemoveWallet(wallet)"
+                    class="wallet-option"
+                    :class="{
+                      selected: removeForm.wallet === wallet.coldkey_name,
+                    }"
+                  >
+                    <div class="wallet-name">{{ wallet.coldkey_name }}</div>
+                    <div class="wallet-balance">
+                      {{ formatBalance(wallet.staked) }} staked
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 无搜索结果 -->
+                <div
+                  v-if="
+                    removeWalletDropdownOpen &&
+                    removeWalletSearch &&
+                    filteredRemoveWallets.length === 0
+                  "
+                  class="wallet-dropdown no-results"
+                >
+                  <div class="wallet-option disabled">
+                    No wallets found matching "{{ removeWalletSearch }}"
+                  </div>
+                </div>
+              </div>
+
+              <!-- 快速选择区域 -->
+              <div
+                v-if="!removeWalletSearch && sortedWallets.length > 0"
+                class="quick-select"
+              >
+                <span class="quick-select-label">Quick select:</span>
+                <div class="quick-select-buttons">
+                  <button
+                    v-for="wallet in sortedWallets.slice(0, 3)"
+                    :key="'quick-remove-' + wallet.coldkey_name"
+                    type="button"
+                    @click="selectRemoveWallet(wallet)"
+                    class="quick-select-btn"
+                    :disabled="removeLoading"
+                  >
+                    {{ wallet.coldkey_name }}
+                    <span class="quick-select-balance"
+                      >({{ formatBalance(wallet.staked) }})</span
+                    >
+                  </button>
+                  <span v-if="sortedWallets.length > 3" class="more-wallets">
+                    +{{ sortedWallets.length - 3 }} more...
+                  </span>
+                </div>
+              </div>
+
               <div v-if="selectedWallet" class="wallet-details">
                 <p>Address: {{ selectedWallet.coldkey_address }}</p>
                 <p>Staked: {{ formatBalance(selectedWallet.staked) }}</p>
@@ -391,6 +597,14 @@ export default {
     const removeSuccessMessage = ref("");
     const removeErrorMessage = ref("");
 
+    // 搜索选择相关状态
+    const fromWalletSearch = ref("");
+    const toWalletSearch = ref("");
+    const removeWalletSearch = ref("");
+    const fromWalletDropdownOpen = ref(false);
+    const toWalletDropdownOpen = ref(false);
+    const removeWalletDropdownOpen = ref(false);
+
     // 获取所有钱包
     const fetchAllWallets = async () => {
       loading.value = true;
@@ -416,17 +630,17 @@ export default {
       transferSuccessMessage.value = "";
       transferErrorMessage.value = "";
 
-      if (sortedWallets.value.length > 0) {
-        transferForm.value.alias = sortedWallets.value[0].coldkey_name;
-        transferForm.value.to =
-          sortedWallets.value.length > 1
-            ? sortedWallets.value[1].coldkey_name
-            : "";
-        selectedFromWallet.value = sortedWallets.value[0];
-        selectedToWallet.value =
-          sortedWallets.value.length > 1 ? sortedWallets.value[1] : null;
-      }
+      // 重置搜索状态
+      resetTransferSearchStates();
+
+      // 不再自动选择钱包，让用户主动搜索选择
+
       transferModalVisible.value = true;
+
+      // 添加点击外部关闭的事件监听
+      setTimeout(() => {
+        document.addEventListener("click", handleClickOutside);
+      }, 100);
     };
 
     // 关闭Transfer模态框
@@ -438,6 +652,10 @@ export default {
       // 重置消息状态
       transferSuccessMessage.value = "";
       transferErrorMessage.value = "";
+      // 重置搜索状态
+      resetTransferSearchStates();
+      // 移除事件监听
+      document.removeEventListener("click", handleClickOutside);
     };
 
     // 更新选择的from钱包
@@ -489,11 +707,17 @@ export default {
       removeSuccessMessage.value = "";
       removeErrorMessage.value = "";
 
-      if (sortedWallets.value.length > 0) {
-        removeForm.value.wallet = sortedWallets.value[0].coldkey_name;
-        selectedWallet.value = sortedWallets.value[0];
-      }
+      // 重置搜索状态
+      resetRemoveSearchStates();
+
+      // 不再自动选择钱包，让用户主动搜索选择
+
       removeModalVisible.value = true;
+
+      // 添加点击外部关闭的事件监听
+      setTimeout(() => {
+        document.addEventListener("click", handleClickOutside);
+      }, 100);
     };
 
     // 关闭Remove Stake模态框
@@ -504,6 +728,10 @@ export default {
       // 重置消息状态
       removeSuccessMessage.value = "";
       removeErrorMessage.value = "";
+      // 重置搜索状态
+      resetRemoveSearchStates();
+      // 移除事件监听
+      document.removeEventListener("click", handleClickOutside);
     };
 
     // 更新选择的钱包
@@ -571,6 +799,30 @@ export default {
       return walletsCopy;
     });
 
+    // 搜索筛选函数 - 只按coldkey name搜索
+    const filterWallets = (searchTerm) => {
+      if (!searchTerm || !sortedWallets.value) {
+        return sortedWallets.value;
+      }
+
+      const term = searchTerm.toLowerCase();
+      return sortedWallets.value.filter((wallet) => {
+        const name = (wallet.coldkey_name || "").toLowerCase();
+        return name.includes(term);
+      });
+    };
+
+    // 各个搜索场景的筛选结果
+    const filteredFromWallets = computed(() =>
+      filterWallets(fromWalletSearch.value)
+    );
+    const filteredToWallets = computed(() =>
+      filterWallets(toWalletSearch.value)
+    );
+    const filteredRemoveWallets = computed(() =>
+      filterWallets(removeWalletSearch.value)
+    );
+
     // 计算各列总和 (基于排序后的数据)
     const totalSums = computed(() => {
       if (!sortedWallets.value || sortedWallets.value.length === 0) {
@@ -616,6 +868,71 @@ export default {
       return sortDirection.value === "asc" ? "↑" : "↓";
     };
 
+    // 搜索选择交互函数
+    const selectFromWallet = (wallet) => {
+      transferForm.value.alias = wallet.coldkey_name;
+      fromWalletSearch.value = wallet.coldkey_name;
+      selectedFromWallet.value = wallet;
+      fromWalletDropdownOpen.value = false;
+    };
+
+    const selectToWallet = (wallet) => {
+      transferForm.value.to = wallet.coldkey_name;
+      toWalletSearch.value = wallet.coldkey_name;
+      selectedToWallet.value = wallet;
+      toWalletDropdownOpen.value = false;
+    };
+
+    const selectRemoveWallet = (wallet) => {
+      removeForm.value.wallet = wallet.coldkey_name;
+      removeWalletSearch.value = wallet.coldkey_name;
+      selectedWallet.value = wallet;
+      removeWalletDropdownOpen.value = false;
+    };
+
+    const clearFromWalletSearch = () => {
+      fromWalletSearch.value = "";
+      transferForm.value.alias = "";
+      selectedFromWallet.value = null;
+    };
+
+    const clearToWalletSearch = () => {
+      toWalletSearch.value = "";
+      transferForm.value.to = "";
+      selectedToWallet.value = null;
+    };
+
+    const clearRemoveWalletSearch = () => {
+      removeWalletSearch.value = "";
+      removeForm.value.wallet = "";
+      selectedWallet.value = null;
+    };
+
+    // 点击外部关闭下拉列表
+    const handleClickOutside = (event) => {
+      const target = event.target;
+
+      // 检查是否点击在搜索容器外部
+      if (!target.closest(".wallet-search-container")) {
+        fromWalletDropdownOpen.value = false;
+        toWalletDropdownOpen.value = false;
+        removeWalletDropdownOpen.value = false;
+      }
+    };
+
+    // 初始化模态框时重置搜索状态
+    const resetTransferSearchStates = () => {
+      fromWalletSearch.value = "";
+      toWalletSearch.value = "";
+      fromWalletDropdownOpen.value = false;
+      toWalletDropdownOpen.value = false;
+    };
+
+    const resetRemoveSearchStates = () => {
+      removeWalletSearch.value = "";
+      removeWalletDropdownOpen.value = false;
+    };
+
     // 格式化余额显示
     const formatBalance = (balance) => {
       return parseFloat(balance).toFixed(6) + " TAO";
@@ -649,6 +966,26 @@ export default {
       totalSums,
       sortField,
       sortDirection,
+      // 搜索相关状态
+      fromWalletSearch,
+      toWalletSearch,
+      removeWalletSearch,
+      fromWalletDropdownOpen,
+      toWalletDropdownOpen,
+      removeWalletDropdownOpen,
+      filteredFromWallets,
+      filteredToWallets,
+      filteredRemoveWallets,
+      // 搜索相关函数
+      selectFromWallet,
+      selectToWallet,
+      selectRemoveWallet,
+      clearFromWalletSearch,
+      clearToWalletSearch,
+      clearRemoveWalletSearch,
+      handleClickOutside,
+      resetTransferSearchStates,
+      resetRemoveSearchStates,
       toggleSort,
       getSortIcon,
       openTransferModal,
@@ -968,6 +1305,185 @@ export default {
   box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
 }
 
+/* 搜索选择组件样式 */
+.wallet-search-container {
+  position: relative;
+  width: 100%;
+}
+
+.wallet-search-input {
+  width: 100%;
+  padding: 12px 40px 12px 12px;
+  border: 1px solid #e0e6ed;
+  border-radius: 6px;
+  font-size: 16px;
+  transition: border-color 0.3s;
+  background-color: white;
+}
+
+.wallet-search-input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+}
+
+.clear-search-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #7f8c8d;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.clear-search-btn:hover {
+  background-color: #f8f9fa;
+  color: #e74c3c;
+}
+
+.wallet-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e0e6ed;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.wallet-dropdown.no-results {
+  max-height: auto;
+}
+
+.wallet-option {
+  padding: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #f8f9fa;
+  transition: background-color 0.2s;
+}
+
+.wallet-option:last-child {
+  border-bottom: none;
+}
+
+.wallet-option:hover {
+  background-color: #f8f9fa;
+}
+
+.wallet-option.selected {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.wallet-option.disabled {
+  cursor: not-allowed;
+  color: #7f8c8d;
+  background-color: #f8f9fa;
+}
+
+.wallet-name {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 4px;
+}
+
+.wallet-balance {
+  font-size: 14px;
+  color: #7f8c8d;
+}
+
+.wallet-option.selected .wallet-name {
+  color: #1976d2;
+}
+
+.wallet-option.selected .wallet-balance {
+  color: #1565c0;
+}
+
+/* 快速选择区域样式 */
+.quick-select {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.quick-select-label {
+  font-size: 14px;
+  color: #6c757d;
+  font-weight: 500;
+  margin-bottom: 8px;
+  display: block;
+}
+
+.quick-select-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.quick-select-btn {
+  padding: 6px 12px;
+  background-color: white;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #495057;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+}
+
+.quick-select-btn:hover {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+  transform: translateY(-1px);
+}
+
+.quick-select-btn:active {
+  transform: translateY(0);
+}
+
+.quick-select-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.quick-select-balance {
+  font-size: 11px;
+  color: #6c757d;
+  margin-top: 2px;
+}
+
+.more-wallets {
+  font-size: 12px;
+  color: #6c757d;
+  font-style: italic;
+  margin-left: 8px;
+}
+
 .wallet-details {
   margin-top: 10px;
   padding: 10px;
@@ -1114,6 +1630,56 @@ export default {
   }
 
   .sort-icon {
+    font-size: 11px;
+  }
+
+  .wallet-search-input {
+    padding: 10px 35px 10px 10px;
+    font-size: 14px;
+  }
+
+  .clear-search-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
+  }
+
+  .wallet-dropdown {
+    max-height: 150px;
+  }
+
+  .wallet-option {
+    padding: 10px;
+  }
+
+  .wallet-name {
+    font-size: 14px;
+  }
+
+  .wallet-balance {
+    font-size: 12px;
+  }
+
+  .quick-select {
+    padding: 10px;
+    margin-top: 10px;
+  }
+
+  .quick-select-label {
+    font-size: 13px;
+  }
+
+  .quick-select-btn {
+    padding: 5px 8px;
+    font-size: 12px;
+    min-width: 70px;
+  }
+
+  .quick-select-balance {
+    font-size: 10px;
+  }
+
+  .more-wallets {
     font-size: 11px;
   }
 
