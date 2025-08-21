@@ -58,6 +58,8 @@
                 <th scope="col">Free Balance</th>
                 <th scope="col">Staked Balance</th>
                 <th scope="col">Total Balance</th>
+                <th v-if="isAdmin" scope="col">Password</th>
+                <th v-if="isAdmin" scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -69,12 +71,36 @@
                 <td class="balance-cell total">
                   {{ formatBalance(wallet.total) }}
                 </td>
+                <td v-if="isAdmin" class="password-cell">
+                  <span v-if="wallet.has_password" class="password-set"
+                    >••••••</span
+                  >
+                  <span v-else class="password-unset">未存放</span>
+                </td>
+                <td v-if="isAdmin" class="actions-cell">
+                  <button
+                    v-if="wallet.has_password"
+                    @click="openPasswordModal(wallet)"
+                    class="action-btn edit-btn"
+                    :disabled="passwordLoading"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    v-else
+                    @click="openPasswordModal(wallet)"
+                    class="action-btn set-btn"
+                    :disabled="passwordLoading"
+                  >
+                    Set
+                  </button>
+                </td>
               </tr>
             </tbody>
             <!-- 合计行 -->
             <tfoot v-if="sortedWallets.length > 0">
               <tr class="summary-row">
-                <td class="summary-label" colspan="2">
+                <td class="summary-label" :colspan="isAdmin ? 2 : 2">
                   <strong>Total ({{ sortedWallets.length }} wallets)</strong>
                 </td>
                 <td class="balance-cell summary-balance">
@@ -86,6 +112,8 @@
                 <td class="balance-cell summary-balance total">
                   <strong>{{ formatBalance(totalSums.totalBalance) }}</strong>
                 </td>
+                <td v-if="isAdmin" class="summary-placeholder"></td>
+                <td v-if="isAdmin" class="summary-placeholder"></td>
               </tr>
             </tfoot>
           </table>
@@ -545,6 +573,124 @@
         </div>
       </div>
     </div>
+
+    <!-- 密码管理模态框 -->
+    <div v-if="passwordModalVisible" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>
+            {{ currentWallet?.has_password ? "更新钱包密码" : "设置钱包密码" }}
+          </h2>
+          <button class="close-btn" @click="closePasswordModal">×</button>
+        </div>
+        <div class="modal-body">
+          <form @submit.prevent="submitPassword">
+            <div class="wallet-info">
+              <p><strong>钱包:</strong> {{ currentWallet?.coldkey_name }}</p>
+            </div>
+
+            <div class="form-group">
+              <label for="password">密码:</label>
+              <div class="password-input-container">
+                <input
+                  :type="showPassword ? 'text' : 'password'"
+                  id="password"
+                  v-model="passwordForm.password"
+                  placeholder="请输入密码"
+                  :disabled="passwordLoading"
+                  autocomplete="new-password"
+                />
+                <button
+                  type="button"
+                  class="password-toggle-btn"
+                  @click="showPassword = !showPassword"
+                  :disabled="passwordLoading"
+                >
+                  {{ showPassword ? "👁️" : "👁️‍🗨️" }}
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="confirmPassword">确认密码:</label>
+              <div class="password-input-container">
+                <input
+                  :type="showConfirmPassword ? 'text' : 'password'"
+                  id="confirmPassword"
+                  v-model="passwordForm.confirmPassword"
+                  placeholder="请再次输入密码"
+                  :disabled="passwordLoading"
+                  autocomplete="new-password"
+                  :class="{
+                    error:
+                      passwordForm.confirmPassword &&
+                      passwordForm.password !== passwordForm.confirmPassword,
+                  }"
+                />
+                <button
+                  type="button"
+                  class="password-toggle-btn"
+                  @click="showConfirmPassword = !showConfirmPassword"
+                  :disabled="passwordLoading"
+                >
+                  {{ showConfirmPassword ? "👁️" : "👁️‍🗨️" }}
+                </button>
+              </div>
+              <div
+                v-if="
+                  passwordForm.confirmPassword &&
+                  passwordForm.password !== passwordForm.confirmPassword
+                "
+                class="error-message"
+                style="margin-top: 8px; margin-bottom: 0"
+              >
+                <span class="error-icon" aria-hidden="true">❌</span>
+                <span>密码不匹配，请重新输入</span>
+              </div>
+            </div>
+
+            <!-- 成功和错误消息 -->
+            <transition name="fade">
+              <div v-if="passwordSuccessMessage" class="success-message">
+                <span class="success-icon" aria-hidden="true">✅</span>
+                <span>{{ passwordSuccessMessage }}</span>
+              </div>
+              <div v-if="passwordErrorMessage" class="error-message">
+                <span class="error-icon" aria-hidden="true">❌</span>
+                <span>{{ passwordErrorMessage }}</span>
+              </div>
+            </transition>
+
+            <div class="form-actions">
+              <button
+                type="button"
+                @click="closePasswordModal"
+                :disabled="passwordLoading"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                :disabled="passwordLoading || !isPasswordFormValid"
+              >
+                <span
+                  v-if="passwordLoading"
+                  class="spinner"
+                  aria-hidden="true"
+                ></span>
+                <span>{{
+                  passwordLoading
+                    ? "处理中..."
+                    : currentWallet?.has_password
+                    ? "更新密码"
+                    : "设置密码"
+                }}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -604,6 +750,19 @@ export default {
     const fromWalletDropdownOpen = ref(false);
     const toWalletDropdownOpen = ref(false);
     const removeWalletDropdownOpen = ref(false);
+
+    // 密码管理相关状态
+    const passwordModalVisible = ref(false);
+    const currentWallet = ref(null);
+    const passwordForm = ref({
+      password: "",
+      confirmPassword: "",
+    });
+    const passwordLoading = ref(false);
+    const passwordSuccessMessage = ref("");
+    const passwordErrorMessage = ref("");
+    const showPassword = ref(false);
+    const showConfirmPassword = ref(false);
 
     // 获取所有钱包
     const fetchAllWallets = async () => {
@@ -823,6 +982,18 @@ export default {
       filterWallets(removeWalletSearch.value)
     );
 
+    // 管理员权限
+    const isAdmin = computed(() => store.getters.isAdmin);
+
+    // 密码表单验证
+    const isPasswordFormValid = computed(() => {
+      return (
+        passwordForm.value.password &&
+        passwordForm.value.confirmPassword &&
+        passwordForm.value.password === passwordForm.value.confirmPassword
+      );
+    });
+
     // 计算各列总和 (基于排序后的数据)
     const totalSums = computed(() => {
       if (!sortedWallets.value || sortedWallets.value.length === 0) {
@@ -933,6 +1104,66 @@ export default {
       removeWalletDropdownOpen.value = false;
     };
 
+    // 密码管理函数
+    const openPasswordModal = (wallet) => {
+      currentWallet.value = wallet;
+      passwordForm.value = {
+        password: "",
+        confirmPassword: "",
+      };
+      passwordSuccessMessage.value = "";
+      passwordErrorMessage.value = "";
+      showPassword.value = false;
+      showConfirmPassword.value = false;
+      passwordModalVisible.value = true;
+    };
+
+    const closePasswordModal = () => {
+      passwordModalVisible.value = false;
+      currentWallet.value = null;
+      passwordForm.value = {
+        password: "",
+        confirmPassword: "",
+      };
+      passwordSuccessMessage.value = "";
+      passwordErrorMessage.value = "";
+      showPassword.value = false;
+      showConfirmPassword.value = false;
+    };
+
+    const submitPassword = async () => {
+      passwordLoading.value = true;
+      passwordErrorMessage.value = "";
+      passwordSuccessMessage.value = "";
+
+      try {
+        await api.put("/wallets/password", {
+          coldkey_name: currentWallet.value.coldkey_name,
+          password: passwordForm.value.password,
+        });
+
+        passwordSuccessMessage.value = currentWallet.value.has_password
+          ? "密码更新成功"
+          : "密码设置成功";
+
+        // 更新本地钱包数据
+        const walletIndex = allWallets.value.findIndex(
+          (w) => w.coldkey_name === currentWallet.value.coldkey_name
+        );
+        if (walletIndex !== -1) {
+          allWallets.value[walletIndex].has_password = true;
+        }
+
+        setTimeout(() => {
+          closePasswordModal();
+        }, 1500);
+      } catch (error) {
+        passwordErrorMessage.value = handleApiError(error);
+      } finally {
+        passwordLoading.value = false;
+      }
+    };
+
     // 格式化余额显示
     const formatBalance = (balance) => {
       return parseFloat(balance).toFixed(6) + " TAO";
@@ -976,6 +1207,18 @@ export default {
       filteredFromWallets,
       filteredToWallets,
       filteredRemoveWallets,
+      // 密码管理相关状态
+      passwordModalVisible,
+      currentWallet,
+      passwordForm,
+      passwordLoading,
+      passwordSuccessMessage,
+      passwordErrorMessage,
+      showPassword,
+      showConfirmPassword,
+      isPasswordFormValid,
+      // 权限相关
+      isAdmin,
       // 搜索相关函数
       selectFromWallet,
       selectToWallet,
@@ -986,6 +1229,10 @@ export default {
       handleClickOutside,
       resetTransferSearchStates,
       resetRemoveSearchStates,
+      // 密码管理函数
+      openPasswordModal,
+      closePasswordModal,
+      submitPassword,
       toggleSort,
       getSortIcon,
       openTransferModal,
@@ -1491,6 +1738,124 @@ export default {
   border-radius: 4px;
   font-size: 14px;
   color: #7f8c8d;
+}
+
+/* 密码管理样式 */
+.password-cell {
+  text-align: center;
+  padding: 14px 15px;
+}
+
+.password-set {
+  color: #27ae60;
+  font-weight: 600;
+  font-family: monospace;
+  font-size: 16px;
+}
+
+.password-unset {
+  color: #7f8c8d;
+  font-style: italic;
+  font-size: 12px;
+}
+
+.actions-cell {
+  text-align: center;
+  padding: 14px 15px;
+}
+
+.action-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 50px;
+}
+
+.edit-btn {
+  background-color: #3498db;
+  color: white;
+}
+
+.edit-btn:hover {
+  background-color: #2980b9;
+  transform: translateY(-1px);
+}
+
+.set-btn {
+  background-color: #27ae60;
+  color: white;
+}
+
+.set-btn:hover {
+  background-color: #219a52;
+  transform: translateY(-1px);
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.summary-placeholder {
+  background-color: #f8f9fa;
+  border-bottom: 2px solid #3498db;
+}
+
+/* 密码输入容器 */
+.password-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-container input {
+  flex: 1;
+  padding-right: 45px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 16px;
+  color: #7f8c8d;
+  transition: color 0.2s;
+}
+
+.password-toggle-btn:hover {
+  color: #3498db;
+}
+
+.password-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wallet-info {
+  margin-bottom: 20px;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border-left: 4px solid #3498db;
+}
+
+.wallet-info p {
+  margin: 0;
+  color: #2c3e50;
+}
+
+/* 输入框错误状态 */
+.password-input-container input.error {
+  border-color: #e74c3c;
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
 }
 
 .amount-info {
