@@ -4,6 +4,15 @@
     <div class="header-section">
       <h1>Wallet Management</h1>
       <div class="action-buttons">
+        <button
+          v-if="isAdmin"
+          class="import-btn"
+          @click="importWallets"
+          :disabled="importLoading"
+        >
+          <span v-if="importLoading" class="spinner" aria-hidden="true"></span>
+          <span>{{ importLoading ? "Importing..." : "Import Wallets" }}</span>
+        </button>
         <button class="transfer-btn" @click="openTransferModal">
           Transfer
         </button>
@@ -24,6 +33,21 @@
         <div class="wallet-count-info">
           Showing all {{ sortedWallets.length }} wallets
         </div>
+
+        <!-- Import操作状态提示 -->
+        <transition name="fade">
+          <div v-if="importSuccessMessage" class="success-message">
+            <span class="success-icon" aria-hidden="true">✅</span>
+            <span>{{ importSuccessMessage }}</span>
+          </div>
+        </transition>
+
+        <transition name="fade">
+          <div v-if="importErrorMessage" class="error-message">
+            <span class="error-icon" aria-hidden="true">❌</span>
+            <span>{{ importErrorMessage }}</span>
+          </div>
+        </transition>
 
         <div class="table-scroll-container">
           <table
@@ -743,6 +767,11 @@ export default {
     const removeSuccessMessage = ref("");
     const removeErrorMessage = ref("");
 
+    // 新增状态：Import Wallets操作相关
+    const importLoading = ref(false);
+    const importSuccessMessage = ref("");
+    const importErrorMessage = ref("");
+
     // 搜索选择相关状态
     const fromWalletSearch = ref("");
     const toWalletSearch = ref("");
@@ -1164,6 +1193,31 @@ export default {
       }
     };
 
+    // Import Wallets函数
+    const importWallets = async () => {
+      importLoading.value = true;
+      importSuccessMessage.value = "";
+      importErrorMessage.value = "";
+
+      try {
+        await api.post("/wallets/sync");
+        importSuccessMessage.value = "钱包导入成功";
+
+        // 成功后刷新钱包列表
+        setTimeout(() => {
+          fetchAllWallets();
+          importSuccessMessage.value = "";
+        }, 2000);
+      } catch (error) {
+        importErrorMessage.value = handleApiError(error);
+        setTimeout(() => {
+          importErrorMessage.value = "";
+        }, 5000);
+      } finally {
+        importLoading.value = false;
+      }
+    };
+
     // 格式化余额显示
     const formatBalance = (balance) => {
       return parseFloat(balance).toFixed(6) + " TAO";
@@ -1194,6 +1248,10 @@ export default {
       removeLoading,
       removeSuccessMessage,
       removeErrorMessage,
+      // Import相关状态
+      importLoading,
+      importSuccessMessage,
+      importErrorMessage,
       totalSums,
       sortField,
       sortDirection,
@@ -1233,6 +1291,8 @@ export default {
       openPasswordModal,
       closePasswordModal,
       submitPassword,
+      // Import函数
+      importWallets,
       toggleSort,
       getSortIcon,
       openTransferModal,
@@ -1276,6 +1336,11 @@ export default {
   gap: 15px;
 }
 
+.import-btn {
+  margin-right: 35px;
+}
+
+.import-btn,
 .transfer-btn,
 .remove-btn {
   padding: 10px 20px;
@@ -1285,6 +1350,11 @@ export default {
   cursor: pointer;
   transition: all 0.3s ease;
   font-size: 16px;
+}
+
+.import-btn {
+  background: linear-gradient(135deg, #27ae60, #219a52);
+  color: white;
 }
 
 .transfer-btn {
@@ -1297,6 +1367,12 @@ export default {
   color: white;
 }
 
+.import-btn:hover {
+  background: linear-gradient(135deg, #219a52, #1e8449);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
+}
+
 .transfer-btn:hover {
   background: linear-gradient(135deg, #2980b9, #2575b0);
   transform: translateY(-2px);
@@ -1307,6 +1383,14 @@ export default {
   background: linear-gradient(135deg, #c0392b, #b03a2e);
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
+}
+
+.import-btn:disabled,
+.transfer-btn:disabled,
+.remove-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .wallet-table-container {
