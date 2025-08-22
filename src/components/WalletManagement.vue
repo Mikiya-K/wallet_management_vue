@@ -59,6 +59,14 @@
             </caption>
             <thead>
               <tr>
+                <th v-if="isAdmin" scope="col" class="checkbox-column">
+                  <input
+                    type="checkbox"
+                    v-model="isAllSelected"
+                    @change="toggleSelectAll"
+                    class="select-checkbox"
+                  />
+                </th>
                 <th scope="col" class="sortable-header">
                   <button
                     class="sort-button"
@@ -88,6 +96,15 @@
             </thead>
             <tbody>
               <tr v-for="wallet in sortedWallets" :key="wallet.coldkey_name">
+                <td v-if="isAdmin" class="checkbox-column">
+                  <input
+                    type="checkbox"
+                    :value="wallet.coldkey_name"
+                    v-model="selectedWallets"
+                    @change="updateSelectAllState"
+                    class="select-checkbox"
+                  />
+                </td>
                 <td>{{ wallet.coldkey_name }}</td>
                 <td class="address-cell">{{ wallet.coldkey_address }}</td>
                 <td class="balance-cell">{{ formatBalance(wallet.free) }}</td>
@@ -124,7 +141,7 @@
             <!-- 合计行 -->
             <tfoot v-if="sortedWallets.length > 0">
               <tr class="summary-row">
-                <td class="summary-label" :colspan="isAdmin ? 2 : 2">
+                <td class="summary-label" :colspan="isAdmin ? 3 : 2">
                   <strong>Total ({{ sortedWallets.length }} wallets)</strong>
                 </td>
                 <td class="balance-cell summary-balance">
@@ -146,6 +163,37 @@
         <div v-if="sortedWallets.length === 0" class="no-data">
           <p>No wallet data available</p>
         </div>
+
+        <!-- 批量操作栏 -->
+        <transition name="fade">
+          <div
+            v-if="isAdmin && selectedWallets.length > 0"
+            class="batch-actions-bar"
+          >
+            <div class="batch-info">
+              <span class="selected-count"
+                >已选择 {{ selectedWallets.length }} 个钱包</span
+              >
+            </div>
+            <div class="batch-buttons">
+              <button
+                class="batch-password-btn"
+                @click="openBatchPasswordModal"
+                :disabled="batchLoading"
+              >
+                <span
+                  v-if="batchLoading"
+                  class="spinner"
+                  aria-hidden="true"
+                ></span>
+                <span>{{ batchLoading ? "处理中..." : "批量设置密码" }}</span>
+              </button>
+              <button class="clear-selection-btn" @click="clearSelection">
+                取消选择
+              </button>
+            </div>
+          </div>
+        </transition>
       </div>
     </div>
 
@@ -715,6 +763,155 @@
         </div>
       </div>
     </div>
+
+    <!-- 批量密码设置模态框 -->
+    <div v-if="batchPasswordModalVisible" class="modal-overlay">
+      <div class="modal-content batch-modal">
+        <div class="modal-header">
+          <h2>批量设置钱包密码</h2>
+          <button class="close-btn" @click="closeBatchPasswordModal">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="batch-info-section">
+            <p>
+              <strong>已选择 {{ selectedWallets.length }} 个钱包</strong>
+            </p>
+            <div v-if="batchProgress.total > 0" class="progress-section">
+              <div class="progress-bar">
+                <div
+                  class="progress-fill"
+                  :style="{
+                    width:
+                      (batchProgress.current / batchProgress.total) * 100 + '%',
+                  }"
+                ></div>
+              </div>
+              <span class="progress-text">
+                {{ batchProgress.current }} / {{ batchProgress.total }} 完成
+              </span>
+            </div>
+          </div>
+
+          <form @submit.prevent="submitBatchPasswords">
+            <div class="batch-password-list">
+              <div
+                v-for="walletName in selectedWallets"
+                :key="walletName"
+                class="wallet-password-item"
+              >
+                <div class="wallet-name">{{ walletName }}</div>
+                <div class="password-input-container">
+                  <input
+                    :type="
+                      batchPasswordForms[walletName]?.showPassword
+                        ? 'text'
+                        : 'password'
+                    "
+                    v-model="batchPasswordForms[walletName].password"
+                    :placeholder="`请输入 ${walletName} 的密码`"
+                    :disabled="batchLoading"
+                    autocomplete="new-password"
+                    class="batch-password-input"
+                  />
+                  <button
+                    type="button"
+                    class="password-toggle-btn"
+                    @click="
+                      batchPasswordForms[walletName].showPassword =
+                        !batchPasswordForms[walletName].showPassword
+                    "
+                    :disabled="batchLoading"
+                  >
+                    {{
+                      batchPasswordForms[walletName]?.showPassword ? "👁️" : "👁️‍🗨️"
+                    }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 批量操作结果 -->
+            <div v-if="batchResults.length > 0" class="batch-results">
+              <h4>处理结果</h4>
+              <div class="results-summary">
+                <span class="success-count"
+                  >成功:
+                  {{ batchResults.filter((r) => r.success).length }}</span
+                >
+                <span class="failure-count"
+                  >失败:
+                  {{ batchResults.filter((r) => !r.success).length }}</span
+                >
+              </div>
+              <div class="results-list">
+                <div
+                  v-for="result in batchResults"
+                  :key="result.coldkey_name"
+                  class="result-item"
+                  :class="{ success: result.success, failure: !result.success }"
+                >
+                  <span class="wallet-name">{{ result.coldkey_name }}</span>
+                  <span class="result-status">
+                    {{ result.success ? "✅ 成功" : "❌ " + result.error }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 表单验证提示 -->
+            <transition name="fade">
+              <div
+                v-if="!isBatchFormValid && selectedWallets.length > 0"
+                class="error-message"
+              >
+                <span class="error-icon" aria-hidden="true">⚠️</span>
+                <div>
+                  <div>请为所有钱包输入密码后再提交</div>
+                  <div class="missing-passwords">
+                    未输入密码的钱包：{{
+                      getMissingPasswordWallets().join(", ")
+                    }}
+                  </div>
+                </div>
+              </div>
+            </transition>
+
+            <!-- 成功和错误消息 -->
+            <transition name="fade">
+              <div v-if="batchSuccessMessage" class="success-message">
+                <span class="success-icon" aria-hidden="true">✅</span>
+                <span>{{ batchSuccessMessage }}</span>
+              </div>
+              <div v-if="batchErrorMessage" class="error-message">
+                <span class="error-icon" aria-hidden="true">❌</span>
+                <span>{{ batchErrorMessage }}</span>
+              </div>
+            </transition>
+
+            <div class="form-actions">
+              <button
+                type="button"
+                @click="closeBatchPasswordModal"
+                :disabled="batchLoading"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                :disabled="batchLoading || !isBatchFormValid"
+              >
+                <span
+                  v-if="batchLoading"
+                  class="spinner"
+                  aria-hidden="true"
+                ></span>
+                <span>{{ batchLoading ? "处理中..." : "设置密码" }}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -771,6 +968,17 @@ export default {
     const importLoading = ref(false);
     const importSuccessMessage = ref("");
     const importErrorMessage = ref("");
+
+    // 批量操作相关状态
+    const selectedWallets = ref([]);
+    const isAllSelected = ref(false);
+    const batchPasswordModalVisible = ref(false);
+    const batchPasswordForms = ref({});
+    const batchLoading = ref(false);
+    const batchSuccessMessage = ref("");
+    const batchErrorMessage = ref("");
+    const batchProgress = ref({ current: 0, total: 0 });
+    const batchResults = ref([]);
 
     // 搜索选择相关状态
     const fromWalletSearch = ref("");
@@ -1023,6 +1231,20 @@ export default {
       );
     });
 
+    // 批量密码表单验证
+    const isBatchFormValid = computed(() => {
+      return selectedWallets.value.every((walletName) =>
+        batchPasswordForms.value[walletName]?.password?.trim()
+      );
+    });
+
+    // 获取缺失密码的钱包列表
+    const getMissingPasswordWallets = () => {
+      return selectedWallets.value.filter(
+        (walletName) => !batchPasswordForms.value[walletName]?.password?.trim()
+      );
+    };
+
     // 计算各列总和 (基于排序后的数据)
     const totalSums = computed(() => {
       if (!sortedWallets.value || sortedWallets.value.length === 0) {
@@ -1218,6 +1440,108 @@ export default {
       }
     };
 
+    // 批量选择逻辑函数
+    const toggleSelectAll = () => {
+      if (isAllSelected.value) {
+        selectedWallets.value = sortedWallets.value.map(
+          (wallet) => wallet.coldkey_name
+        );
+      } else {
+        selectedWallets.value = [];
+      }
+    };
+
+    const updateSelectAllState = () => {
+      const totalWallets = sortedWallets.value.length;
+      const selectedCount = selectedWallets.value.length;
+      isAllSelected.value = totalWallets > 0 && selectedCount === totalWallets;
+    };
+
+    const clearSelection = () => {
+      selectedWallets.value = [];
+      isAllSelected.value = false;
+    };
+
+    const openBatchPasswordModal = () => {
+      // 初始化批量密码表单
+      batchPasswordForms.value = {};
+      selectedWallets.value.forEach((walletName) => {
+        batchPasswordForms.value[walletName] = {
+          password: "",
+          showPassword: false,
+        };
+      });
+
+      batchPasswordModalVisible.value = true;
+      batchSuccessMessage.value = "";
+      batchErrorMessage.value = "";
+      batchProgress.value = { current: 0, total: 0 };
+      batchResults.value = [];
+    };
+
+    const closeBatchPasswordModal = () => {
+      batchPasswordModalVisible.value = false;
+      batchPasswordForms.value = {};
+      batchSuccessMessage.value = "";
+      batchErrorMessage.value = "";
+      batchProgress.value = { current: 0, total: 0 };
+      batchResults.value = [];
+    };
+
+    const submitBatchPasswords = async () => {
+      batchLoading.value = true;
+      batchSuccessMessage.value = "";
+      batchErrorMessage.value = "";
+      batchResults.value = [];
+
+      // 准备批量密码数据
+      const passwords = selectedWallets.value.map((walletName) => ({
+        coldkey_name: walletName,
+        password: batchPasswordForms.value[walletName].password,
+      }));
+
+      batchProgress.value = { current: 0, total: passwords.length };
+
+      try {
+        const response = await api.put("/wallets/password/batch", {
+          passwords,
+        });
+        batchResults.value = response.data.results;
+
+        const successCount = response.data.success_count;
+        const failureCount = response.data.failure_count;
+
+        if (failureCount === 0) {
+          batchSuccessMessage.value = `成功为 ${successCount} 个钱包设置密码`;
+
+          // 更新本地钱包数据
+          selectedWallets.value.forEach((walletName) => {
+            const walletIndex = allWallets.value.findIndex(
+              (w) => w.coldkey_name === walletName
+            );
+            if (walletIndex !== -1) {
+              allWallets.value[walletIndex].has_password = true;
+            }
+          });
+
+          setTimeout(() => {
+            closeBatchPasswordModal();
+            clearSelection();
+          }, 2000);
+        } else {
+          batchErrorMessage.value = `处理完成：${successCount} 个成功，${failureCount} 个失败`;
+        }
+      } catch (error) {
+        batchErrorMessage.value = handleApiError(error);
+      } finally {
+        batchLoading.value = false;
+        batchProgress.value = {
+          current: passwords.length,
+          total: passwords.length,
+        };
+      }
+    };
+
     // 格式化余额显示
     const formatBalance = (balance) => {
       return parseFloat(balance).toFixed(6) + " TAO";
@@ -1275,6 +1599,18 @@ export default {
       showPassword,
       showConfirmPassword,
       isPasswordFormValid,
+      // 批量操作相关状态
+      selectedWallets,
+      isAllSelected,
+      batchPasswordModalVisible,
+      batchPasswordForms,
+      batchLoading,
+      batchSuccessMessage,
+      batchErrorMessage,
+      batchProgress,
+      batchResults,
+      isBatchFormValid,
+      getMissingPasswordWallets,
       // 权限相关
       isAdmin,
       // 搜索相关函数
@@ -1291,6 +1627,13 @@ export default {
       openPasswordModal,
       closePasswordModal,
       submitPassword,
+      // 批量操作函数
+      toggleSelectAll,
+      updateSelectAllState,
+      clearSelection,
+      openBatchPasswordModal,
+      closeBatchPasswordModal,
+      submitBatchPasswords,
       // Import函数
       importWallets,
       toggleSort,
@@ -1940,6 +2283,236 @@ export default {
 .password-input-container input.error {
   border-color: #e74c3c;
   box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+}
+
+/* 批量操作样式 */
+.checkbox-column {
+  width: 50px;
+  text-align: center;
+  padding: 14px 10px;
+}
+
+.select-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #3498db;
+}
+
+.batch-actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background-color: #e3f2fd;
+  border: 1px solid #2196f3;
+  border-radius: 8px;
+  margin-top: 15px;
+  animation: slideDown 0.3s ease-out;
+}
+
+.batch-info {
+  display: flex;
+  align-items: center;
+}
+
+.selected-count {
+  font-weight: 600;
+  color: #1976d2;
+  font-size: 14px;
+}
+
+.batch-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.batch-password-btn {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #2196f3, #1976d2);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+}
+
+.batch-password-btn:hover {
+  background: linear-gradient(135deg, #1976d2, #1565c0);
+  transform: translateY(-1px);
+}
+
+.batch-password-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.clear-selection-btn {
+  padding: 8px 16px;
+  background-color: #f5f5f5;
+  color: #666;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 14px;
+}
+
+.clear-selection-btn:hover {
+  background-color: #e0e0e0;
+  border-color: #bbb;
+}
+
+/* 批量密码模态框样式 */
+.batch-modal {
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.batch-info-section {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #2196f3;
+}
+
+.progress-section {
+  margin-top: 10px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 5px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2196f3, #1976d2);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #666;
+}
+
+.batch-password-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+
+.wallet-password-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  background-color: #fafafa;
+}
+
+.wallet-password-item .wallet-name {
+  flex: 0 0 150px;
+  font-weight: 600;
+  color: #333;
+  margin-right: 15px;
+}
+
+.batch-password-input {
+  flex: 1;
+  padding: 8px 35px 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.batch-password-input:focus {
+  outline: none;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+/* 批量结果显示样式 */
+.batch-results {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.batch-results h4 {
+  margin: 0 0 10px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.results-summary {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 15px;
+}
+
+.success-count {
+  color: #27ae60;
+  font-weight: 600;
+}
+
+.failure-count {
+  color: #e74c3c;
+  font-weight: 600;
+}
+
+.results-list {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  margin-bottom: 5px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.result-item.success {
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+}
+
+.result-item.failure {
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+}
+
+.result-item .wallet-name {
+  font-weight: 600;
+}
+
+.result-item .result-status {
+  font-size: 12px;
+}
+
+/* 批量表单验证提示样式 */
+.missing-passwords {
+  font-size: 13px;
+  color: #666;
+  margin-top: 5px;
+  font-family: monospace;
 }
 
 .amount-info {
