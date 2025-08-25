@@ -2,8 +2,8 @@ import axios from 'axios';
 import store from '../store';
 
 const api = axios.create({
-    baseURL: 'http://168.100.174.146:16002/api',
-    timeout: 100000
+    baseURL: process.env.VUE_APP_API_BASE_URL || 'http://168.100.174.146:16002/api',
+    timeout: parseInt(process.env.VUE_APP_API_TIMEOUT) || 100000
 });
 
 // 刷新令牌处理状态
