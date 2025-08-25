@@ -793,7 +793,44 @@
           </div>
 
           <form @submit.prevent="submitBatchPasswords">
-            <div class="batch-password-list">
+            <!-- 共享密码选项 -->
+            <div class="shared-password-option">
+              <label class="switch-container">
+                <input
+                  type="checkbox"
+                  v-model="useSharedPassword"
+                  @change="onSharedPasswordToggle"
+                  :disabled="batchLoading"
+                />
+                <span class="switch-slider"></span>
+                <span class="switch-label">所有钱包使用相同密码</span>
+              </label>
+            </div>
+
+            <!-- 共享密码输入（仅在开关打开时显示） -->
+            <div v-if="useSharedPassword" class="shared-password-input-group">
+              <div class="password-input-container">
+                <input
+                  :type="sharedPasswordVisible ? 'text' : 'password'"
+                  v-model="sharedPassword"
+                  placeholder="请输入统一密码"
+                  :disabled="batchLoading"
+                  autocomplete="new-password"
+                  class="shared-password-input"
+                />
+                <button
+                  type="button"
+                  class="password-toggle-btn"
+                  @click="sharedPasswordVisible = !sharedPasswordVisible"
+                  :disabled="batchLoading"
+                >
+                  {{ sharedPasswordVisible ? "👁️" : "👁️‍🗨️" }}
+                </button>
+              </div>
+            </div>
+
+            <!-- 原有的单独密码列表（仅在开关关闭时显示） -->
+            <div v-else class="batch-password-list">
               <div
                 v-for="walletName in selectedWallets"
                 :key="walletName"
@@ -866,10 +903,19 @@
               >
                 <span class="error-icon" aria-hidden="true">⚠️</span>
                 <div>
-                  <div>请为所有钱包输入密码后再提交</div>
+                  <div>
+                    {{
+                      useSharedPassword
+                        ? "请输入统一密码后再提交"
+                        : "请为所有钱包输入密码后再提交"
+                    }}
+                  </div>
                   <div class="missing-passwords">
-                    未输入密码的钱包：{{
-                      getMissingPasswordWallets().join(", ")
+                    {{
+                      useSharedPassword
+                        ? "缺少统一密码"
+                        : "未输入密码的钱包：" +
+                          getMissingPasswordWallets().join(", ")
                     }}
                   </div>
                 </div>
@@ -979,6 +1025,11 @@ export default {
     const batchErrorMessage = ref("");
     const batchProgress = ref({ current: 0, total: 0 });
     const batchResults = ref([]);
+
+    // 共享密码相关状态
+    const useSharedPassword = ref(false);
+    const sharedPassword = ref("");
+    const sharedPasswordVisible = ref(false);
 
     // 搜索选择相关状态
     const fromWalletSearch = ref("");
@@ -1233,6 +1284,9 @@ export default {
 
     // 批量密码表单验证
     const isBatchFormValid = computed(() => {
+      if (useSharedPassword.value) {
+        return sharedPassword.value.trim().length > 0;
+      }
       return selectedWallets.value.every((walletName) =>
         batchPasswordForms.value[walletName]?.password?.trim()
       );
@@ -1240,6 +1294,9 @@ export default {
 
     // 获取缺失密码的钱包列表
     const getMissingPasswordWallets = () => {
+      if (useSharedPassword.value) {
+        return sharedPassword.value.trim() ? [] : ["请输入统一密码"];
+      }
       return selectedWallets.value.filter(
         (walletName) => !batchPasswordForms.value[walletName]?.password?.trim()
       );
@@ -1463,6 +1520,11 @@ export default {
     };
 
     const openBatchPasswordModal = () => {
+      // 默认关闭共享密码选项
+      useSharedPassword.value = false;
+      sharedPassword.value = "";
+      sharedPasswordVisible.value = false;
+
       // 初始化批量密码表单
       batchPasswordForms.value = {};
       selectedWallets.value.forEach((walletName) => {
@@ -1482,10 +1544,35 @@ export default {
     const closeBatchPasswordModal = () => {
       batchPasswordModalVisible.value = false;
       batchPasswordForms.value = {};
+      useSharedPassword.value = false;
+      sharedPassword.value = "";
+      sharedPasswordVisible.value = false;
       batchSuccessMessage.value = "";
       batchErrorMessage.value = "";
       batchProgress.value = { current: 0, total: 0 };
       batchResults.value = [];
+    };
+
+    // 共享密码模式切换处理
+    const onSharedPasswordToggle = () => {
+      if (useSharedPassword.value) {
+        // 切换到共享模式：清空之前的单独密码输入
+        selectedWallets.value.forEach((walletName) => {
+          if (batchPasswordForms.value[walletName]) {
+            batchPasswordForms.value[walletName].password = "";
+          }
+        });
+      } else {
+        // 切换到单独模式：将共享密码应用到所有输入框
+        if (sharedPassword.value.trim()) {
+          selectedWallets.value.forEach((walletName) => {
+            if (batchPasswordForms.value[walletName]) {
+              batchPasswordForms.value[walletName].password =
+                sharedPassword.value;
+            }
+          });
+        }
+      }
     };
 
     const submitBatchPasswords = async () => {
@@ -1497,7 +1584,9 @@ export default {
       // 准备批量密码数据
       const passwords = selectedWallets.value.map((walletName) => ({
         coldkey_name: walletName,
-        password: batchPasswordForms.value[walletName].password,
+        password: useSharedPassword.value
+          ? sharedPassword.value
+          : batchPasswordForms.value[walletName].password,
       }));
 
       batchProgress.value = { current: 0, total: passwords.length };
@@ -1611,6 +1700,10 @@ export default {
       batchResults,
       isBatchFormValid,
       getMissingPasswordWallets,
+      // 共享密码相关状态
+      useSharedPassword,
+      sharedPassword,
+      sharedPasswordVisible,
       // 权限相关
       isAdmin,
       // 搜索相关函数
@@ -1634,6 +1727,7 @@ export default {
       openBatchPasswordModal,
       closeBatchPasswordModal,
       submitBatchPasswords,
+      onSharedPasswordToggle,
       // Import函数
       importWallets,
       toggleSort,
@@ -2712,6 +2806,78 @@ export default {
   .form-actions button {
     width: 100%;
   }
+}
+
+/* 共享密码选项样式 */
+.shared-password-option {
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.switch-container {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.switch-container input[type="checkbox"] {
+  display: none;
+}
+
+.switch-slider {
+  position: relative;
+  width: 44px;
+  height: 22px;
+  background: #ccc;
+  border-radius: 22px;
+  transition: background 0.3s;
+  margin-right: 10px;
+}
+
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s;
+}
+
+.switch-container input:checked + .switch-slider {
+  background: #2196f3;
+}
+
+.switch-container input:checked + .switch-slider::before {
+  transform: translateX(22px);
+}
+
+.switch-label {
+  font-weight: 500;
+  color: #333;
+}
+
+.shared-password-input-group {
+  margin-bottom: 20px;
+}
+
+.shared-password-input {
+  flex: 1;
+  padding: 10px 40px 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.shared-password-input:focus {
+  outline: none;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
 }
 
 @media (max-width: 480px) {
