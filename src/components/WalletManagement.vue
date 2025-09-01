@@ -199,7 +199,7 @@
 
     <!-- Transfer模态框 -->
     <div v-if="transferModalVisible" class="modal-overlay">
-      <div class="modal-content">
+      <div class="modal-content transfer-modal">
         <div class="modal-header">
           <h2>Transfer Funds</h2>
           <button
@@ -468,7 +468,7 @@
 
     <!-- Remove Stake模态框 -->
     <div v-if="removeModalVisible" class="modal-overlay">
-      <div class="modal-content">
+      <div class="modal-content remove-stake-modal">
         <div class="modal-header">
           <h2>Remove Stake</h2>
           <button
@@ -546,7 +546,7 @@
 
               <!-- 快速选择区域 -->
               <div
-                v-if="!removeWalletSearch && sortedWallets.length > 0"
+                v-show="!removeWalletSearch && sortedWallets.length > 0"
                 class="quick-select"
               >
                 <span class="quick-select-label">Quick select:</span>
@@ -2011,6 +2011,18 @@ export default {
   max-width: 500px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
   overflow: hidden;
+}
+
+/* Remove Stake模态框 - 固定高度防止大小变动 */
+.modal-content.remove-stake-modal {
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-content.remove-stake-modal .modal-body {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .modal-header {
