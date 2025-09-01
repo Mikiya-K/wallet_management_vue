@@ -392,8 +392,15 @@ export default {
           ),
         ];
 
-        walletsList.value = uniqueWallets;
-        availableWallets.value = uniqueWallets;
+        // 对钱包列表进行排序（按名称升序）
+        const sortedWallets = uniqueWallets.sort((a, b) => {
+          const nameA = (a || "").toLowerCase();
+          const nameB = (b || "").toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+
+        walletsList.value = sortedWallets;
+        availableWallets.value = sortedWallets;
       } catch (error) {
         availableWallets.value = [];
         if (error.response?.status === 401) {
