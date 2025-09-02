@@ -250,7 +250,7 @@
                     @click="selectFromWallet(wallet)"
                     class="wallet-option"
                     :class="{
-                      selected: transferForm.alias === wallet.coldkey_name,
+                      selected: transferForm.alias === wallet.coldkey_address,
                     }"
                   >
                     <div class="wallet-name">{{ wallet.coldkey_name }}</div>
@@ -342,7 +342,7 @@
                     @click="selectToWallet(wallet)"
                     class="wallet-option"
                     :class="{
-                      selected: transferForm.to === wallet.coldkey_name,
+                      selected: transferForm.to === wallet.coldkey_address,
                     }"
                   >
                     <div class="wallet-name">{{ wallet.coldkey_name }}</div>
@@ -1349,14 +1349,14 @@ export default {
 
     // 搜索选择交互函数
     const selectFromWallet = (wallet) => {
-      transferForm.value.alias = wallet.coldkey_name;
+      transferForm.value.alias = wallet.coldkey_address; // 使用coldkey_address而不是coldkey_name
       fromWalletSearch.value = wallet.coldkey_name;
       selectedFromWallet.value = wallet;
       fromWalletDropdownOpen.value = false;
     };
 
     const selectToWallet = (wallet) => {
-      transferForm.value.to = wallet.coldkey_name;
+      transferForm.value.to = wallet.coldkey_address; // 使用coldkey_address而不是coldkey_name
       toWalletSearch.value = wallet.coldkey_name;
       selectedToWallet.value = wallet;
       toWalletDropdownOpen.value = false;
@@ -1371,13 +1371,13 @@ export default {
 
     const clearFromWalletSearch = () => {
       fromWalletSearch.value = "";
-      transferForm.value.alias = "";
+      transferForm.value.alias = ""; // 清空alias字段（现在存储的是coldkey_address）
       selectedFromWallet.value = null;
     };
 
     const clearToWalletSearch = () => {
       toWalletSearch.value = "";
-      transferForm.value.to = "";
+      transferForm.value.to = ""; // 清空to字段（现在存储的是coldkey_address）
       selectedToWallet.value = null;
     };
 
