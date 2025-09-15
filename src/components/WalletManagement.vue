@@ -2,7 +2,10 @@
   <div class="wallet-management-container">
     <!-- 标题和操作按钮 -->
     <div class="header-section">
-      <h1>Wallet Management</h1>
+      <h2>
+        <i class="fas fa-list"></i>
+        钱包列表
+      </h2>
       <div class="action-buttons">
         <button
           v-if="isAdmin"
@@ -309,7 +312,34 @@
 
             <div class="form-group">
               <label for="toWallet">To Wallet:</label>
-              <div class="wallet-search-container">
+
+              <!-- 标签页切换 (仅管理员可见) -->
+              <div v-if="isAdmin" class="wallet-tabs">
+                <button
+                  type="button"
+                  class="tab-button"
+                  :class="{ active: toWalletTab === 'local' }"
+                  @click="switchToWalletTab('local')"
+                >
+                  <i class="fas fa-home"></i>
+                  本地钱包
+                </button>
+                <button
+                  type="button"
+                  class="tab-button"
+                  :class="{ active: toWalletTab === 'external' }"
+                  @click="switchToWalletTab('external')"
+                >
+                  <i class="fas fa-external-link-alt"></i>
+                  外部钱包
+                </button>
+              </div>
+
+              <!-- 本地钱包搜索 -->
+              <div
+                v-if="toWalletTab === 'local'"
+                class="wallet-search-container"
+              >
                 <input
                   type="text"
                   id="toWallet"
@@ -369,7 +399,11 @@
 
               <!-- 快速选择区域 -->
               <div
-                v-if="!toWalletSearch && sortedWallets.length > 0"
+                v-if="
+                  toWalletTab === 'local' &&
+                  !toWalletSearch &&
+                  sortedWallets.length > 0
+                "
                 class="quick-select"
               >
                 <span class="quick-select-label">Quick select:</span>
@@ -392,6 +426,102 @@
 
               <div v-if="selectedToWallet" class="wallet-details">
                 <p>Address: {{ selectedToWallet.coldkey_address }}</p>
+              </div>
+
+              <!-- 外部钱包搜索 -->
+              <div
+                v-if="toWalletTab === 'external'"
+                class="wallet-search-container"
+              >
+                <input
+                  type="text"
+                  id="externalWallet"
+                  v-model="externalWalletSearch"
+                  :placeholder="`Search from ${externalWallets.length} external wallets...`"
+                  @focus="externalWalletDropdownOpen = true"
+                  @input="externalWalletDropdownOpen = true"
+                  :disabled="transferLoading"
+                  class="wallet-search-input"
+                  autocomplete="off"
+                />
+                <button
+                  v-if="externalWalletSearch"
+                  type="button"
+                  @click="clearExternalWalletSearch"
+                  class="clear-search-btn"
+                  :disabled="transferLoading"
+                >
+                  ×
+                </button>
+
+                <!-- 外部钱包下拉搜索结果 -->
+                <div
+                  v-if="
+                    externalWalletDropdownOpen &&
+                    filteredExternalWallets.length > 0
+                  "
+                  class="wallet-dropdown"
+                >
+                  <div
+                    v-for="wallet in filteredExternalWallets"
+                    :key="'external-' + wallet.address"
+                    @click="selectExternalWallet(wallet)"
+                    class="wallet-option"
+                    :class="{
+                      selected: transferForm.to === wallet.address,
+                    }"
+                  >
+                    <div class="wallet-name">{{ wallet.name }}</div>
+                    <div class="wallet-address">{{ wallet.address }}</div>
+                  </div>
+                </div>
+
+                <!-- 无外部钱包搜索结果 -->
+                <div
+                  v-if="
+                    externalWalletDropdownOpen &&
+                    externalWalletSearch &&
+                    filteredExternalWallets.length === 0
+                  "
+                  class="wallet-dropdown no-results"
+                >
+                  <div class="wallet-option disabled">
+                    No external wallets found matching "{{
+                      externalWalletSearch
+                    }}"
+                  </div>
+                </div>
+
+                <!-- 外部钱包快速选择区域 -->
+                <div
+                  v-if="!externalWalletSearch && externalWallets.length > 0"
+                  class="quick-select"
+                >
+                  <span class="quick-select-label">Quick select:</span>
+                  <div class="quick-select-buttons">
+                    <button
+                      v-for="wallet in externalWallets.slice(0, 3)"
+                      :key="'quick-external-' + wallet.address"
+                      type="button"
+                      @click="selectExternalWallet(wallet)"
+                      class="quick-select-btn"
+                      :disabled="transferLoading"
+                    >
+                      {{ wallet.name }}
+                    </button>
+                    <span
+                      v-if="externalWallets.length > 3"
+                      class="more-wallets"
+                    >
+                      +{{ externalWallets.length - 3 }} more...
+                    </span>
+                  </div>
+                </div>
+
+                <div v-if="selectedExternalWallet" class="wallet-details">
+                  <p>Name: {{ selectedExternalWallet.name }}</p>
+                  <p>Address: {{ selectedExternalWallet.address }}</p>
+                </div>
               </div>
             </div>
 
@@ -1039,6 +1169,13 @@ export default {
     const toWalletDropdownOpen = ref(false);
     const removeWalletDropdownOpen = ref(false);
 
+    // 外部钱包相关状态
+    const externalWallets = ref([]);
+    const toWalletTab = ref("local"); // 'local' | 'external'
+    const externalWalletSearch = ref("");
+    const externalWalletDropdownOpen = ref(false);
+    const selectedExternalWallet = ref(null);
+
     // 密码管理相关状态
     const passwordModalVisible = ref(false);
     const currentWallet = ref(null);
@@ -1071,6 +1208,19 @@ export default {
       }
     };
 
+    // 获取外部钱包列表
+    const fetchExternalWallets = async () => {
+      if (!isAdmin.value) return;
+
+      try {
+        const response = await api.get("/wallets/external");
+        externalWallets.value = response.data || [];
+      } catch (error) {
+        console.error("获取外部钱包列表失败:", error);
+        externalWallets.value = [];
+      }
+    };
+
     // 打开Transfer模态框
     const openTransferModal = () => {
       // 重置消息
@@ -1079,6 +1229,11 @@ export default {
 
       // 重置搜索状态
       resetTransferSearchStates();
+
+      // 获取外部钱包列表（仅管理员）
+      if (isAdmin.value) {
+        fetchExternalWallets();
+      }
 
       // 不再自动选择钱包，让用户主动搜索选择
 
@@ -1096,11 +1251,16 @@ export default {
       transferForm.value = { alias: "", to: "", amount: 0 };
       selectedFromWallet.value = null;
       selectedToWallet.value = null;
+      selectedExternalWallet.value = null;
       // 重置消息状态
       transferSuccessMessage.value = "";
       transferErrorMessage.value = "";
       // 重置搜索状态
       resetTransferSearchStates();
+      // 重置外部钱包状态
+      toWalletTab.value = "local";
+      externalWalletSearch.value = "";
+      externalWalletDropdownOpen.value = false;
       // 移除事件监听
       document.removeEventListener("click", handleClickOutside);
     };
@@ -1131,17 +1291,44 @@ export default {
       transferLoading.value = true;
 
       var transferFlag = false;
+      var transferError = null;
+
       try {
-        await api.post("/wallets", transferForm.value, {});
-        transferSuccessMessage.value = "Transfer completed successfully";
+        if (toWalletTab.value === "external") {
+          // 外部钱包转账
+          const externalTransferData = {
+            from_wallet: transferForm.value.alias,
+            to_address: transferForm.value.to,
+            amount: transferForm.value.amount,
+          };
+          await api.post("/wallets/external/transfer", externalTransferData);
+          transferSuccessMessage.value =
+            "External transfer completed successfully";
+
+          // 刷新外部钱包列表
+          await fetchExternalWallets();
+        } else {
+          // 本地钱包转账
+          await api.post("/wallets", transferForm.value, {});
+          transferSuccessMessage.value = "Transfer completed successfully";
+        }
+
         transferFlag = true;
+
+        // 刷新钱包数据以获取最新余额
+        await fetchAllWallets();
+
         setTimeout(() => {
           closeTransferModal();
         }, 1500);
       } catch (error) {
+        transferError = error;
         transferErrorMessage.value = handleApiError(error);
       } finally {
-        if (transferFlag) {
+        if (transferFlag && !transferError) {
+          // 成功时已经在try块中刷新了
+        } else if (!transferFlag) {
+          // 失败时也需要刷新以确保数据一致性
           fetchAllWallets();
         }
         transferLoading.value = false;
@@ -1270,6 +1457,19 @@ export default {
       filterWallets(removeWalletSearch.value)
     );
 
+    // 外部钱包过滤
+    const filteredExternalWallets = computed(() => {
+      if (!externalWalletSearch.value) {
+        return externalWallets.value;
+      }
+      const searchTerm = externalWalletSearch.value.toLowerCase();
+      return externalWallets.value.filter(
+        (wallet) =>
+          wallet.name.toLowerCase().includes(searchTerm) ||
+          wallet.address.toLowerCase().includes(searchTerm)
+      );
+    });
+
     // 管理员权限
     const isAdmin = computed(() => store.getters.isAdmin);
 
@@ -1381,6 +1581,34 @@ export default {
       selectedToWallet.value = null;
     };
 
+    // 外部钱包相关方法
+    const selectExternalWallet = (wallet) => {
+      transferForm.value.to = wallet.address; // 外部钱包使用address
+      externalWalletSearch.value = wallet.name;
+      selectedExternalWallet.value = wallet;
+      externalWalletDropdownOpen.value = false;
+    };
+
+    const clearExternalWalletSearch = () => {
+      externalWalletSearch.value = "";
+      transferForm.value.to = "";
+      selectedExternalWallet.value = null;
+    };
+
+    const switchToWalletTab = (tab) => {
+      toWalletTab.value = tab;
+      // 清空当前选择
+      transferForm.value.to = "";
+      selectedToWallet.value = null;
+      selectedExternalWallet.value = null;
+      // 清空搜索
+      toWalletSearch.value = "";
+      externalWalletSearch.value = "";
+      // 关闭下拉
+      toWalletDropdownOpen.value = false;
+      externalWalletDropdownOpen.value = false;
+    };
+
     const clearRemoveWalletSearch = () => {
       removeWalletSearch.value = "";
       removeForm.value.wallet = "";
@@ -1392,10 +1620,14 @@ export default {
       const target = event.target;
 
       // 检查是否点击在搜索容器外部
-      if (!target.closest(".wallet-search-container")) {
+      if (
+        !target.closest(".wallet-search-container") &&
+        !target.closest(".wallet-tabs")
+      ) {
         fromWalletDropdownOpen.value = false;
         toWalletDropdownOpen.value = false;
         removeWalletDropdownOpen.value = false;
+        externalWalletDropdownOpen.value = false;
       }
     };
 
@@ -1403,8 +1635,11 @@ export default {
     const resetTransferSearchStates = () => {
       fromWalletSearch.value = "";
       toWalletSearch.value = "";
+      externalWalletSearch.value = "";
       fromWalletDropdownOpen.value = false;
       toWalletDropdownOpen.value = false;
+      externalWalletDropdownOpen.value = false;
+      toWalletTab.value = "local";
     };
 
     const resetRemoveSearchStates = () => {
@@ -1678,6 +1913,13 @@ export default {
       filteredFromWallets,
       filteredToWallets,
       filteredRemoveWallets,
+      filteredExternalWallets,
+      // 外部钱包相关状态
+      externalWallets,
+      toWalletTab,
+      externalWalletSearch,
+      externalWalletDropdownOpen,
+      selectedExternalWallet,
       // 密码管理相关状态
       passwordModalVisible,
       currentWallet,
@@ -1713,6 +1955,11 @@ export default {
       clearFromWalletSearch,
       clearToWalletSearch,
       clearRemoveWalletSearch,
+      // 外部钱包相关函数
+      selectExternalWallet,
+      clearExternalWalletSearch,
+      switchToWalletTab,
+      fetchExternalWallets,
       handleClickOutside,
       resetTransferSearchStates,
       resetRemoveSearchStates,
@@ -1759,13 +2006,25 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px;
+  margin-bottom: 30px;
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  color: white;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
-.header-section h1 {
-  font-size: 28px;
-  color: #2c3e50;
+.header-section h2 {
   margin: 0;
+  font-size: 1.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-section h2 i {
+  font-size: 1.5rem;
 }
 
 .action-buttons {
@@ -1773,53 +2032,28 @@ export default {
   gap: 15px;
 }
 
-.import-btn {
-  margin-right: 35px;
-}
-
 .import-btn,
 .transfer-btn,
 .remove-btn {
   padding: 10px 20px;
-  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 6px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
-  font-size: 16px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.import-btn {
-  background: linear-gradient(135deg, #27ae60, #219a52);
-  color: white;
-}
-
-.transfer-btn {
-  background: linear-gradient(135deg, #3498db, #2980b9);
-  color: white;
-}
-
-.remove-btn {
-  background: linear-gradient(135deg, #e74c3c, #c0392b);
-  color: white;
-}
-
-.import-btn:hover {
-  background: linear-gradient(135deg, #219a52, #1e8449);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
-}
-
-.transfer-btn:hover {
-  background: linear-gradient(135deg, #2980b9, #2575b0);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
-}
-
-.remove-btn:hover {
-  background: linear-gradient(135deg, #c0392b, #b03a2e);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
+.import-btn:hover:not(:disabled),
+.transfer-btn:hover:not(:disabled),
+.remove-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
 }
 
 .import-btn:disabled,
@@ -2410,10 +2644,11 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 15px 20px;
-  background-color: #e3f2fd;
-  border: 1px solid #2196f3;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
   border-radius: 8px;
-  margin-top: 15px;
+  margin-top: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   animation: slideDown 0.3s ease-out;
 }
 
@@ -2424,7 +2659,7 @@ export default {
 
 .selected-count {
   font-weight: 600;
-  color: #1976d2;
+  color: white;
   font-size: 14px;
 }
 
@@ -2458,19 +2693,18 @@ export default {
 
 .clear-selection-btn {
   padding: 8px 16px;
-  background-color: #f5f5f5;
-  color: #666;
-  border: 1px solid #ddd;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 6px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
   font-size: 14px;
 }
 
 .clear-selection-btn:hover {
-  background-color: #e0e0e0;
-  border-color: #bbb;
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* 批量密码模态框样式 */
@@ -2892,9 +3126,60 @@ export default {
   box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
 }
 
+/* 钱包标签页样式 */
+.wallet-tabs {
+  display: flex;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #e0e6ed;
+}
+
+.tab-button {
+  background: none;
+  border: none;
+  padding: 12px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #6c757d;
+  border-bottom: 2px solid transparent;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tab-button:hover {
+  color: #4361ee;
+  background: rgba(67, 97, 238, 0.05);
+}
+
+.tab-button.active {
+  color: #4361ee;
+  border-bottom-color: #4361ee;
+  font-weight: 600;
+}
+
+.tab-button i {
+  font-size: 12px;
+}
+
 @media (max-width: 480px) {
   .modal-content {
     width: 95%;
+  }
+
+  .wallet-tabs {
+    flex-direction: column;
+  }
+
+  .tab-button {
+    text-align: left;
+    border-bottom: 1px solid #e0e6ed;
+    border-right: 2px solid transparent;
+  }
+
+  .tab-button.active {
+    border-bottom-color: #e0e6ed;
+    border-right-color: #4361ee;
   }
 }
 </style>

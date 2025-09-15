@@ -17,6 +17,24 @@ const routes = [
         component: () => import('../components/UserManagement.vue'),
         meta: { requiresAuth: true, requiresAdmin: true }
     },
+    {
+        path: '/external-wallets',
+        name: 'ExternalWalletManagement',
+        component: () => import('../components/ExternalWalletManagement.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
+        path: '/transfer-history',
+        name: 'TransferHistory',
+        component: () => import('../components/TransferHistory.vue'),
+        meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
+        path: '/miner-registration',
+        name: 'MinerRegistration',
+        component: () => import('../components/MinerRegistration.vue'),
+        meta: { requiresAuth: true }
+    },
     { path: '/:catchAll(.*)', name: 'ErrorPage', component: () => import('../components/ErrorPage.vue') }
 ];
 
