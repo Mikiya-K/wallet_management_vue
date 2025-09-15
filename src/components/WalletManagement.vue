@@ -1305,8 +1305,8 @@ export default {
           transferSuccessMessage.value =
             "External transfer completed successfully";
 
-          // 刷新外部钱包列表
-          await fetchExternalWallets();
+          // 在后台刷新外部钱包列表，不阻塞模态框关闭
+          fetchExternalWallets();
         } else {
           // 本地钱包转账
           await api.post("/wallets", transferForm.value, {});
@@ -1315,12 +1315,13 @@ export default {
 
         transferFlag = true;
 
-        // 刷新钱包数据以获取最新余额
-        await fetchAllWallets();
-
+        // 立即开始关闭倒计时，不等待数据刷新
         setTimeout(() => {
           closeTransferModal();
-        }, 1500);
+        }, 2000);
+
+        // 在后台刷新钱包数据以获取最新余额
+        fetchAllWallets();
       } catch (error) {
         transferError = error;
         transferErrorMessage.value = handleApiError(error);
@@ -1398,7 +1399,7 @@ export default {
         removeStakeFlag = true;
         setTimeout(() => {
           closeRemoveModal();
-        }, 1500);
+        }, 2000);
       } catch (error) {
         removeErrorMessage.value = handleApiError(error);
       } finally {
@@ -1699,7 +1700,7 @@ export default {
 
         setTimeout(() => {
           closePasswordModal();
-        }, 1500);
+        }, 2000);
       } catch (error) {
         passwordErrorMessage.value = handleApiError(error);
       } finally {
