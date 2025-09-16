@@ -1,6 +1,6 @@
 server {
     listen 16002;
-    server_name 168.100.174.146;
+    server_name your-domain.com;
 
     # 性能优化
     sendfile on;
@@ -23,7 +23,7 @@ server {
     open_file_cache_errors off;
 
     # Vue 应用静态文件服务
-    root /root/workspace/wallet_management_vue/dist;
+    root /var/www/wallet-management;
     index index.html;
 
     # 处理 Vue Router 的 history 模式
