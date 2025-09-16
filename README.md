@@ -18,13 +18,23 @@ cp .env.example .env.production
 
 # 构建生产版本
 npm run build
+
+# 部署到服务器
+sudo mkdir -p /var/www/wallet-management
+sudo cp -r dist/* /var/www/wallet-management/
+sudo chown -R www-data:www-data /var/www/wallet-management
 ```
 
 #### 2. Nginx 配置
 
-基于提供的 vue-app 示例配置文件创建你的 Nginx 配置文件
-`/etc/nginx/sites-available/wallet-management`：
-需要修改 `listen`、`server_name`、`部署路径` 和 `proxy_pass` 为你的实际配置
+基于提供的 vue-app 示例配置文件创建你的 Nginx 配置文件 `/etc/nginx/sites-available/wallet-management`
+
+**需要修改的关键配置项：**
+
+- `listen` - 监听端口
+- `server_name` - 域名或 IP 地址
+- `root` - Vue 应用的部署路径
+- `proxy_pass` - 后端 API 服务地址
 
 ```nginx
 server {
@@ -46,7 +56,9 @@ server {
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
 
     # Vue 应用静态文件服务
-    root /path/to/your/wallet_management_vue/dist;  # 替换为实际路径
+
+    # 使用专用目录
+    root /var/www/wallet-management;
     index index.html;
 
     # 处理 Vue Router 的 history 模式
