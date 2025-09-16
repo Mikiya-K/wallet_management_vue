@@ -1,0 +1,110 @@
+server {
+    listen 16002;
+    server_name 168.100.174.146;
+
+    # 性能优化
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 300;
+    keepalive_requests 1000;
+
+    # 启用 Gzip 压缩
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    # 文件缓存优化
+    open_file_cache max=2000 inactive=20s;
+    open_file_cache_valid 30s;
+    open_file_cache_min_uses 2;
+    open_file_cache_errors off;
+
+    # Vue 应用静态文件服务
+    root /root/workspace/wallet_management_vue/dist;
+    index index.html;
+
+    # 处理 Vue Router 的 history 模式
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API 反向代理
+    location /api/ {
+        proxy_pass http://localhost:16003; # 后端API地址
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+
+        # 🔥 添加这些超时设置（关键！）
+        proxy_connect_timeout       300s;   # 连接后端超时
+        proxy_send_timeout          300s;   # 发送请求到后端超时
+        proxy_read_timeout          300s;   # 读取后端响应超时（最重要！）
+        proxy_buffering             off;    # 关闭缓冲，实时传输响应
+
+	# 代理缓存设置
+	#proxy_cache api_cache;
+        #proxy_cache_key "$scheme$request_method$host$request_uri";
+        #proxy_cache_valid 200 302 10m;
+        #proxy_cache_valid 404 1m;
+        #proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+    }
+
+    # 静态资源缓存
+    location ~* \.(?:jpg|jpeg|gif|png|ico|svg|css|js)$ {
+        expires 1y;
+	access_log off;
+        add_header Cache-Control "public";
+	add_header Access-Control-Allow-Origin "*";
+    }
+
+    # 安全头部
+    #add_header X-Frame-Options "SAMEORIGIN" always;
+    #add_header X-Content-Type-Options "nosniff" always;
+    #add_header X-XSS-Protection "1; mode=block" always;
+    #add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    #add_header Content-Security-Policy "default-src 'self'"
+
+    # 错误页面
+    #error_page 400 401 402 403 404 405 406 407 408 409 410 411 412 413 414 415 416 417 500 501 502 503 504 =200 /error.html;
+    #location = /error.html {
+    #    root /workspace/wallet_management_vue/dist;
+    #    internal;
+    #}
+
+    # 禁止访问隐藏文件
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    # 禁止访问敏感文件
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    # 客户端限制
+    client_max_body_size 10m;
+    client_body_buffer_size 128k;
+    client_header_buffer_size 1k;
+    large_client_header_buffers 4 8k;
+
+    # 日志优化
+    access_log /var/log/nginx/access.log combined buffer=32k flush=5m;
+    error_log /var/log/nginx/error.log warn;
+
+    # Nginx 状态监控
+    location /nginx_status {
+    	stub_status on;
+    	access_log off;
+    	allow 127.0.0.1;
+    	deny all;
+    }
+}

@@ -263,7 +263,7 @@
                 <label>Hotkey Name:</label>
                 <span>{{ selectedMiner?.name }}</span>
               </div>
-              <div class="info-item">
+              <div class="info-item address-item">
                 <label>Hotkey Address:</label>
                 <span class="address-text">{{ selectedMiner?.hotkey }}</span>
               </div>
@@ -1866,7 +1866,7 @@ export default {
   background-color: white;
   border-radius: 10px;
   width: 90%;
-  max-width: 600px;
+  max-width: 650px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
   overflow: hidden;
 }
@@ -1936,27 +1936,42 @@ export default {
 
 .info-item {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .info-item label {
   font-weight: 600;
   color: #495057;
   min-width: 120px;
+  flex-shrink: 0;
 }
 
 .info-item span {
   color: #2c3e50;
   word-break: break-all;
+  flex: 1;
+  line-height: 1.4;
+}
+
+.address-item {
+  align-items: center !important;
+}
+
+.address-item label {
+  min-width: 100px !important;
+  flex-shrink: 0;
 }
 
 .address-text {
   font-family: "Courier New", monospace;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
   background-color: #e9ecef;
-  padding: 2px 6px;
+  padding: 4px 8px;
   border-radius: 4px;
+  white-space: nowrap;
+  flex: 1;
+  word-break: break-all;
 }
 
 .form-section h4 {
