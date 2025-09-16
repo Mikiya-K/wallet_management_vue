@@ -23,8 +23,8 @@ npm run build
 #### 2. Nginx 配置
 
 基于提供的 vue-app 示例配置文件创建你的 Nginx 配置文件
-需要修改 `listen`、`server_name`、`部署路径` 和 `proxy_pass` 为你的实际配置
 `/etc/nginx/sites-available/wallet-management`：
+需要修改 `listen`、`server_name`、`部署路径` 和 `proxy_pass` 为你的实际配置
 
 ```nginx
 server {
