@@ -14,7 +14,7 @@ npm install
 
 # 配置生产环境变量
 cp .env.example .env.production
-# 编辑 .env.production 文件，设置Nginx代理的API地址
+# 编辑 .env.production 文件，设置VUE_APP_API_BASE_URL（需要与对应的Nginx配置文件中监听的地址与端口保持一致）
 
 # 构建生产版本
 npm run build
@@ -38,7 +38,7 @@ sudo chown -R www-data:www-data /var/www/wallet-management
 
 ```nginx
 server {
-    listen 16002; # 替换为你的监听端口
+    listen your-port; # 替换为你的监听端口
     server_name your-domain.com;  # 替换为你的域名或IP
 
     # 性能优化
@@ -58,7 +58,7 @@ server {
     # Vue 应用静态文件服务
 
     # 使用专用目录
-    root /var/www/wallet-management;
+    root /var/www/wallet-management; # 可替换为你的部署路径
     index index.html;
 
     # 处理 Vue Router 的 history 模式
@@ -68,7 +68,7 @@ server {
 
     # API 反向代理
     location /api/ {
-        proxy_pass http://localhost:16003;  # 后端API地址
+        proxy_pass http://your-backend-server:port;  # 后端对应的地址及端口（默认：http://localhost:16003）
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -148,7 +148,7 @@ sudo crontab -e
 
 ```dockerfile
 # 构建阶段
-FROM node:16-alpine as build-stage
+FROM node:22-alpine as build-stage
 
 WORKDIR /app
 
@@ -315,7 +315,7 @@ docker-compose logs -f wallet-frontend
 
 ### 环境要求
 
-- Node.js >= 14.0.0
+- Node.js >= 22.0.0
 - npm >= 6.0.0 或 yarn >= 1.22.0
 
 ### 安装依赖

@@ -1,6 +1,6 @@
 server {
-    listen 16002;
-    server_name your-domain.com;
+    listen your-port; # 替换为你的监听端口
+    server_name your-domain.com;  # 替换为你的域名或IP
 
     # 性能优化
     sendfile on;
@@ -23,7 +23,9 @@ server {
     open_file_cache_errors off;
 
     # Vue 应用静态文件服务
-    root /var/www/wallet-management;
+
+    # 使用专用目录
+    root /var/www/wallet-management; # 可替换为你的部署路径
     index index.html;
 
     # 处理 Vue Router 的 history 模式
@@ -33,7 +35,7 @@ server {
 
     # API 反向代理
     location /api/ {
-        proxy_pass http://localhost:16003; # 后端API地址
+        proxy_pass http://your-backend-server:port;  # 后端对应的地址及端口（默认：http://localhost:16003）
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
