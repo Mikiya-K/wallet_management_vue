@@ -5,6 +5,9 @@
 .env.*.local
 .env.production
 
+# Jenkins 环境变量 (包含敏感信息)
+jenkins/.env
+
 # 日志文件
 *.log
 npm-debug.log*
