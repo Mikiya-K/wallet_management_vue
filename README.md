@@ -27,14 +27,22 @@ sudo chown -R www-data:www-data /var/www/wallet-management
 
 #### 2. Nginx 配置
 
-基于提供的 vue-app 示例配置文件创建你的 Nginx 配置文件 `/etc/nginx/sites-available/wallet-management`
+**步骤 1**: 复制示例配置文件并根据你的环境进行修改：
 
-**需要修改的关键配置项：**
+```bash
+# 复制示例配置文件
+sudo cp nginx.conf.example /etc/nginx/sites-available/wallet-management
 
-- `listen` - 监听端口
-- `server_name` - 域名或 IP 地址
-- `root` - Vue 应用的部署路径
-- `proxy_pass` - 后端 API 服务地址
+# 编辑配置文件
+sudo nano /etc/nginx/sites-available/wallet-management
+```
+
+**步骤 2**: 修改以下关键配置项：
+
+- `listen your-port` → `listen 80` (或你的实际端口)
+- `server_name your-domain.com` → `server_name your-actual-domain.com` (或 IP 地址)
+- `root /var/www/wallet-management` → 确认部署路径正确
+- `proxy_pass http://your-backend-server:port` → `proxy_pass http://localhost:16003` (或你的后端地址)
 
 ```nginx
 server {
@@ -144,6 +152,8 @@ sudo crontab -e
 
 ### Docker 部署 (可选)
 
+**重要提示**: 如果使用 Docker 部署，需要先根据 `nginx.conf.example` 创建实际的 nginx 配置文件，或者修改 Dockerfile 中的配置复制逻辑。
+
 #### 1. 创建 Dockerfile
 
 ```dockerfile
@@ -177,7 +187,7 @@ FROM nginx:alpine as production-stage
 COPY --from=build-stage /app/dist /usr/share/nginx/html
 
 # 复制 Nginx 配置
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf.example /etc/nginx/conf.d/default.conf
 
 # 暴露端口
 EXPOSE 80
@@ -495,7 +505,7 @@ wallet_management_vue/
 ├── jsconfig.json              # JavaScript 配置
 ├── package.json               # 项目依赖
 ├── vue.config.js              # Vue CLI 配置
-├── vue-app                    # Nginx 配置文件
+├── nginx.conf.example         # Nginx 配置文件示例
 └── README.md                  # 项目说明
 ```
 
