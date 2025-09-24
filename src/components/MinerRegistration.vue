@@ -129,6 +129,11 @@
                             )"
                           :key="registration.id"
                           class="registration-card"
+                          :class="{
+                            disabled: ['cancelled', 'completed'].includes(
+                              registration.task_status
+                            ),
+                          }"
                         >
                           <div class="card-header">
                             <div class="status-info">
@@ -141,6 +146,114 @@
                               <span class="registration-id"
                                 >#{{ registration.id }}</span
                               >
+                            </div>
+                            <div class="card-actions">
+                              <div class="action-buttons">
+                                <!-- 编辑按钮 - pending、running、failed、paused状态可编辑 -->
+                                <button
+                                  v-if="canEditRegistration(registration)"
+                                  class="action-btn edit-btn"
+                                  @click="editRegistration(registration, miner)"
+                                  :disabled="
+                                    isRegistrationOperating(registration.id)
+                                  "
+                                  title="编辑注册记录"
+                                >
+                                  <span
+                                    v-if="
+                                      isRegistrationOperating(registration.id)
+                                    "
+                                    class="spinner"
+                                    aria-hidden="true"
+                                  ></span>
+                                  <i v-else class="fas fa-edit"></i>
+                                  <span>编辑</span>
+                                </button>
+
+                                <!-- 暂停按钮 - pending、running、failed状态可暂停 -->
+                                <button
+                                  v-if="canPauseRegistration(registration)"
+                                  class="action-btn pause-btn"
+                                  @click="pauseRegistration(registration)"
+                                  :disabled="
+                                    isRegistrationOperating(registration.id)
+                                  "
+                                  title="暂停注册"
+                                >
+                                  <span
+                                    v-if="
+                                      isRegistrationOperating(registration.id)
+                                    "
+                                    class="spinner"
+                                    aria-hidden="true"
+                                  ></span>
+                                  <i v-else class="fas fa-pause"></i>
+                                  <span>暂停</span>
+                                </button>
+
+                                <!-- 恢复按钮 - paused状态可恢复 -->
+                                <button
+                                  v-if="canResumeRegistration(registration)"
+                                  class="action-btn resume-btn"
+                                  @click="resumeRegistration(registration)"
+                                  :disabled="
+                                    isRegistrationOperating(registration.id)
+                                  "
+                                  title="恢复注册"
+                                >
+                                  <span
+                                    v-if="
+                                      isRegistrationOperating(registration.id)
+                                    "
+                                    class="spinner"
+                                    aria-hidden="true"
+                                  ></span>
+                                  <i v-else class="fas fa-play"></i>
+                                  <span>恢复</span>
+                                </button>
+
+                                <!-- 取消按钮 - pending、running、failed、paused状态可取消 -->
+                                <button
+                                  v-if="canCancelRegistration(registration)"
+                                  class="action-btn cancel-btn"
+                                  @click="cancelRegistration(registration)"
+                                  :disabled="
+                                    isRegistrationOperating(registration.id)
+                                  "
+                                  title="取消注册"
+                                >
+                                  <span
+                                    v-if="
+                                      isRegistrationOperating(registration.id)
+                                    "
+                                    class="spinner"
+                                    aria-hidden="true"
+                                  ></span>
+                                  <i v-else class="fas fa-stop"></i>
+                                  <span>取消</span>
+                                </button>
+
+                                <!-- 删除按钮 - 终态记录可删除 -->
+                                <button
+                                  v-if="canDeleteRegistration(registration)"
+                                  class="action-btn delete-btn"
+                                  @click="deleteRegistration(registration)"
+                                  :disabled="
+                                    isRegistrationOperating(registration.id)
+                                  "
+                                  title="删除记录"
+                                >
+                                  <span
+                                    v-if="
+                                      isRegistrationOperating(registration.id)
+                                    "
+                                    class="spinner"
+                                    aria-hidden="true"
+                                  ></span>
+                                  <i v-else class="fas fa-trash"></i>
+                                  <span>删除</span>
+                                </button>
+                              </div>
                             </div>
                             <div class="created-time">
                               {{ formatDateTime(registration.created_at) }}
@@ -355,9 +468,20 @@
             </form>
           </div>
 
-          <div v-if="registerError" class="error-message">
-            {{ registerError }}
-          </div>
+          <!-- 注册操作状态提示 -->
+          <transition name="fade">
+            <div v-if="registerSuccessMessage" class="success-message">
+              <span class="success-icon" aria-hidden="true">✓</span>
+              <span>{{ registerSuccessMessage }}</span>
+            </div>
+          </transition>
+
+          <transition name="fade">
+            <div v-if="registerError" class="error-message">
+              <span class="error-icon" aria-hidden="true">❌</span>
+              <span>{{ registerError }}</span>
+            </div>
+          </transition>
         </div>
 
         <div class="modal-footer">
@@ -624,6 +748,252 @@
         </div>
       </div>
     </div>
+
+    <!-- 编辑注册记录模态框 -->
+    <div v-if="showEditRegistrationModal" class="modal-overlay">
+      <div class="modal-content register-modal" @click.stop>
+        <div class="modal-header">
+          <h3>
+            <i class="fas fa-edit"></i>
+            编辑注册记录 #{{ editingRegistration?.id }}
+          </h3>
+          <button class="close-btn" @click="closeEditRegistrationModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <div class="miner-info-section">
+            <h4>矿工信息</h4>
+            <div class="info-grid">
+              <div class="info-item">
+                <label>Coldkey Name:</label>
+                <span>{{ editingMiner?.wallet }}</span>
+              </div>
+              <div class="info-item">
+                <label>Hotkey Name:</label>
+                <span>{{ editingMiner?.name }}</span>
+              </div>
+              <div class="info-item address-item">
+                <label>Hotkey Address:</label>
+                <span class="address-text">{{ editingMiner?.hotkey }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h4>注册参数</h4>
+            <form @submit.prevent="confirmEditRegistration">
+              <div class="form-group">
+                <label for="edit-subnet">Subnet *</label>
+                <input
+                  id="edit-subnet"
+                  type="number"
+                  v-model.number="registerForm.subnet"
+                  required
+                  min="1"
+                  class="form-control"
+                  :class="{ 'is-invalid': fieldErrors.subnet }"
+                  placeholder="请输入子网ID"
+                  @blur="validateField('subnet')"
+                  @input="validateField('subnet')"
+                />
+                <div v-if="fieldErrors.subnet" class="field-error">
+                  {{ fieldErrors.subnet }}
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="edit-max_fee">Max Fee *</label>
+                <input
+                  id="edit-max_fee"
+                  type="number"
+                  v-model.number="registerForm.max_fee"
+                  required
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  :class="{ 'is-invalid': fieldErrors.max_fee }"
+                  placeholder="请输入最大费用"
+                  @blur="validateField('max_fee')"
+                  @input="validateField('max_fee')"
+                />
+                <div v-if="fieldErrors.max_fee" class="field-error">
+                  {{ fieldErrors.max_fee }}
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="edit-network">Network (只读)</label>
+                <input
+                  id="edit-network"
+                  type="text"
+                  v-model="registerForm.network"
+                  readonly
+                  class="form-control readonly"
+                  title="网络字段不允许修改"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="edit-start_time">Start Time (可选)</label>
+                <input
+                  id="edit-start_time"
+                  type="datetime-local"
+                  v-model="registerForm.start_time"
+                  class="form-control"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="edit-end_time">End Time (可选)</label>
+                <input
+                  id="edit-end_time"
+                  type="datetime-local"
+                  v-model="registerForm.end_time"
+                  class="form-control"
+                />
+              </div>
+            </form>
+          </div>
+
+          <!-- 编辑操作状态提示 -->
+          <transition name="fade">
+            <div v-if="editSuccessMessage" class="success-message">
+              <span class="success-icon" aria-hidden="true">✓</span>
+              <span>{{ editSuccessMessage }}</span>
+            </div>
+          </transition>
+
+          <transition name="fade">
+            <div v-if="registerError" class="error-message">
+              <span class="error-icon" aria-hidden="true">❌</span>
+              <span>{{ registerError }}</span>
+            </div>
+          </transition>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            @click="closeEditRegistrationModal"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            @click="confirmEditRegistration"
+            :disabled="registerLoading || !isFormValid"
+          >
+            <span
+              v-if="registerLoading"
+              class="spinner"
+              aria-hidden="true"
+            ></span>
+            <span>{{ registerLoading ? "保存中..." : "保存修改" }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 操作确认模态框 -->
+    <div v-if="showConfirmModal" class="modal-overlay">
+      <div class="modal-content confirm-modal" @click.stop>
+        <div class="modal-header">
+          <h3>
+            <i
+              class="fas"
+              :class="{
+                'fa-pause': confirmModalData.type === 'pause',
+                'fa-play': confirmModalData.type === 'resume',
+                'fa-exclamation-triangle': confirmModalData.type === 'cancel',
+              }"
+            ></i>
+            {{ confirmModalData.title }}
+          </h3>
+          <button class="close-btn" @click="closeConfirmModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <div class="confirm-content">
+            <div class="confirm-icon">
+              <i
+                class="fas"
+                :class="{
+                  'fa-pause-circle confirm-icon-warning':
+                    confirmModalData.type === 'pause',
+                  'fa-play-circle confirm-icon-success':
+                    confirmModalData.type === 'resume',
+                  'fa-exclamation-circle confirm-icon-danger':
+                    confirmModalData.type === 'cancel',
+                }"
+              ></i>
+            </div>
+            <div class="confirm-message">
+              <p
+                v-for="line in confirmModalData.message.split('\n')"
+                :key="line"
+                class="message-line"
+              >
+                {{ line }}
+              </p>
+            </div>
+          </div>
+
+          <!-- 确认操作状态提示 -->
+          <transition name="fade">
+            <div v-if="confirmSuccessMessage" class="success-message">
+              <span class="success-icon" aria-hidden="true">✓</span>
+              <span>{{ confirmSuccessMessage }}</span>
+            </div>
+          </transition>
+
+          <transition name="fade">
+            <div v-if="confirmErrorMessage" class="error-message">
+              <span class="error-icon" aria-hidden="true">❌</span>
+              <span>{{ confirmErrorMessage }}</span>
+            </div>
+          </transition>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            @click="closeConfirmModal"
+          >
+            {{ confirmModalData.cancelText }}
+          </button>
+          <button
+            type="button"
+            class="btn"
+            :class="confirmModalData.confirmClass"
+            @click="handleConfirmAction"
+            :disabled="confirmLoading"
+          >
+            <span
+              v-if="confirmLoading"
+              class="spinner"
+              aria-hidden="true"
+            ></span>
+            <i
+              v-else
+              class="fas"
+              :class="{
+                'fa-pause': confirmModalData.type === 'pause',
+                'fa-play': confirmModalData.type === 'resume',
+                'fa-stop': confirmModalData.type === 'cancel',
+              }"
+            ></i>
+            {{ confirmLoading ? "处理中..." : confirmModalData.confirmText }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -651,6 +1021,7 @@ export default {
     // 批量注册相关状态
     const batchRegisterModalVisible = ref(false);
     const batchSuccessMessage = ref("");
+    const registerSuccessMessage = ref("");
     const batchErrorMessage = ref("");
     const batchProgress = ref({ current: 0, total: 0 });
     const batchResults = ref([]);
@@ -660,7 +1031,7 @@ export default {
     const sharedRegisterForm = ref({
       subnet: null,
       max_fee: null,
-      network: "",
+      network: "finney",
       start_time: "",
       end_time: "",
     });
@@ -677,11 +1048,36 @@ export default {
     const registerLoading = ref(false);
     const registerError = ref("");
 
+    // 注册记录编辑相关状态
+    const showEditRegistrationModal = ref(false);
+    const editingRegistration = ref(null);
+    const editingMiner = ref(null);
+    const editSuccessMessage = ref("");
+    const editErrorMessage = ref("");
+
+    // 操作确认模态框状态
+    const showConfirmModal = ref(false);
+    const confirmModalData = ref({
+      title: "",
+      message: "",
+      type: "", // 'pause', 'resume', 'cancel'
+      registration: null,
+      confirmText: "确认",
+      cancelText: "取消",
+      confirmClass: "btn-primary",
+    });
+    const confirmSuccessMessage = ref("");
+    const confirmErrorMessage = ref("");
+    const confirmLoading = ref(false);
+
+    // 操作状态管理
+    const operatingRegistrations = ref(new Set());
+
     // 注册表单数据
     const registerForm = ref({
       subnet: null,
       max_fee: null,
-      network: "",
+      network: "finney",
       start_time: "",
       end_time: "",
     });
@@ -833,7 +1229,7 @@ export default {
       const timestamp = Date.now();
 
       try {
-        const response = await api.get("/wallets/miners", {
+        const response = await api.get("/wallets/miners/registrations", {
           params: {
             _: timestamp,
           },
@@ -919,34 +1315,292 @@ export default {
 
     // 获取状态文本和样式类
     const getStatusInfo = (registration) => {
-      const status = registration.status_text || "unknown";
+      const status = registration.task_status || "unknown";
       let className = "status-unknown";
       let text = status;
 
       switch (status.toLowerCase()) {
-        case "success":
-        case "成功":
-        case "注册成功":
-          className = "status-success";
+        case "pending":
+          className = "status-pending";
+          text = "等待注册";
+          break;
+        case "running":
+          className = "status-running";
+          text = "正在注册";
+          break;
+        case "paused":
+          className = "status-paused";
+          text = "已暂停";
+          break;
+        case "cancelled":
+          className = "status-cancelled";
+          text = "已取消";
+          break;
+        case "completed":
+          className = "status-completed";
           text = "注册成功";
           break;
         case "failed":
-        case "失败":
-        case "注册失败":
           className = "status-failed";
-          text = "注册失败";
-          break;
-        case "pending":
-        case "进行中":
-        case "注册中":
-          className = "status-pending";
-          text = "注册中";
+          text = "注册失败等待重新注册";
           break;
         default:
           text = status;
       }
 
       return { className, text };
+    };
+
+    // 注册记录操作权限判断函数
+    const canEditRegistration = (registration) => {
+      return ["pending", "running", "failed", "paused"].includes(
+        registration.task_status
+      );
+    };
+
+    const canPauseRegistration = (registration) => {
+      return ["pending", "running", "failed"].includes(
+        registration.task_status
+      );
+    };
+
+    const canResumeRegistration = (registration) => {
+      return registration.task_status === "paused";
+    };
+
+    const canCancelRegistration = (registration) => {
+      return ["pending", "running", "failed", "paused"].includes(
+        registration.task_status
+      );
+    };
+
+    const canDeleteRegistration = () => {
+      // 软删除：通过取消状态实现，所以这里暂时不显示删除按钮
+      return false;
+    };
+
+    // 检查注册记录是否正在操作中
+    const isRegistrationOperating = (registrationId) => {
+      return operatingRegistrations.value.has(registrationId);
+    };
+
+    // 编辑注册记录
+    const editRegistration = (registration, miner) => {
+      editingRegistration.value = registration;
+      editingMiner.value = miner;
+
+      // 预填充表单数据（不包括network字段）
+      registerForm.value = {
+        subnet: registration.subnet,
+        max_fee: registration.max_fee,
+        network: registration.network, // 只用于显示，不允许修改
+        start_time: registration.start_time
+          ? new Date(registration.start_time).toISOString().slice(0, 16)
+          : "",
+        end_time: registration.end_time
+          ? new Date(registration.end_time).toISOString().slice(0, 16)
+          : "",
+      };
+
+      // 重置验证错误
+      fieldErrors.value = {
+        subnet: "",
+        max_fee: "",
+        network: "",
+      };
+
+      showEditRegistrationModal.value = true;
+      registerError.value = "";
+    };
+
+    // 关闭编辑注册记录模态框
+    const closeEditRegistrationModal = () => {
+      showEditRegistrationModal.value = false;
+      editingRegistration.value = null;
+      editingMiner.value = null;
+      registerError.value = "";
+      editSuccessMessage.value = "";
+      editErrorMessage.value = "";
+    };
+
+    // 显示确认模态框
+    const showConfirmationModal = (type, registration) => {
+      let title, message, confirmText, confirmClass;
+
+      switch (type) {
+        case "pause":
+          title = "暂停注册";
+          message = `确定要暂停注册记录 #${registration.id} 吗？\n\n暂停后可以随时恢复注册。`;
+          confirmText = "暂停";
+          confirmClass = "btn-warning";
+          break;
+        case "resume":
+          title = "恢复注册";
+          message = `确定要恢复注册记录 #${registration.id} 吗？\n\n恢复后将重新开始注册流程。`;
+          confirmText = "恢复";
+          confirmClass = "btn-success";
+          break;
+        case "cancel":
+          title = "取消注册";
+          message =
+            `确定要取消注册记录 #${registration.id} 吗？\n\n` +
+            `网络: ${registration.network}\n` +
+            `子网: ${registration.subnet}\n` +
+            `最大费用: ${registration.max_fee}\n\n` +
+            `此操作不可撤销！`;
+          confirmText = "取消注册";
+          confirmClass = "btn-danger";
+          break;
+      }
+
+      confirmModalData.value = {
+        title,
+        message,
+        type,
+        registration,
+        confirmText,
+        cancelText: "取消",
+        confirmClass,
+      };
+
+      showConfirmModal.value = true;
+    };
+
+    // 关闭确认模态框
+    const closeConfirmModal = () => {
+      showConfirmModal.value = false;
+      confirmModalData.value = {
+        title: "",
+        message: "",
+        type: "",
+        registration: null,
+        confirmText: "确认",
+        cancelText: "取消",
+        confirmClass: "btn-primary",
+      };
+      confirmSuccessMessage.value = "";
+      confirmErrorMessage.value = "";
+      confirmLoading.value = false;
+    };
+
+    // 确认操作处理
+    const handleConfirmAction = async () => {
+      const { type, registration } = confirmModalData.value;
+
+      // 清除之前的提示消息
+      confirmSuccessMessage.value = "";
+      confirmErrorMessage.value = "";
+      confirmLoading.value = true;
+
+      let status, actionName;
+      switch (type) {
+        case "pause":
+          status = "paused";
+          actionName = "暂停";
+          break;
+        case "resume":
+          status = "pending";
+          actionName = "恢复";
+          break;
+        case "cancel":
+          status = "cancelled";
+          actionName = "取消";
+          break;
+      }
+
+      try {
+        await api.put(
+          `/wallets/miners/registrations/${registration.id}/status`,
+          {
+            status: status,
+          }
+        );
+
+        await fetchAllMiners();
+        confirmSuccessMessage.value = `注册记录 #${registration.id} ${actionName}成功！`;
+
+        setTimeout(() => {
+          closeConfirmModal();
+        }, 1500);
+      } catch (error) {
+        console.error(`${actionName}失败:`, error);
+        confirmErrorMessage.value =
+          error.response?.data?.message ||
+          error.message ||
+          `${actionName}失败，请重试`;
+      } finally {
+        confirmLoading.value = false;
+      }
+    };
+
+    // 暂停注册记录
+    const pauseRegistration = (registration) => {
+      showConfirmationModal("pause", registration);
+    };
+
+    // 恢复注册记录
+    const resumeRegistration = (registration) => {
+      showConfirmationModal("resume", registration);
+    };
+
+    // 取消注册记录
+    const cancelRegistration = (registration) => {
+      showConfirmationModal("cancel", registration);
+    };
+
+    // 删除注册记录（软删除，实际上是取消）
+    const deleteRegistration = (registration) => {
+      // 由于使用软删除，这个函数暂时不使用
+      cancelRegistration(registration);
+    };
+
+    // 确认编辑注册记录
+    const confirmEditRegistration = async () => {
+      if (!isFormValid.value || !editingRegistration.value) return;
+
+      registerLoading.value = true;
+      registerError.value = "";
+      editSuccessMessage.value = "";
+      editErrorMessage.value = "";
+
+      try {
+        const apiData = {
+          subnet: registerForm.value.subnet,
+          max_fee: registerForm.value.max_fee,
+        };
+
+        // 添加可选的时间字段
+        if (registerForm.value.start_time) {
+          apiData.start_time = new Date(
+            registerForm.value.start_time
+          ).toISOString();
+        }
+        if (registerForm.value.end_time) {
+          apiData.end_time = new Date(
+            registerForm.value.end_time
+          ).toISOString();
+        }
+
+        // 调用编辑API
+        await api.put(
+          `/wallets/miners/registrations/${editingRegistration.value.id}`,
+          apiData
+        );
+
+        // 刷新数据
+        await fetchAllMiners();
+        editSuccessMessage.value = `注册记录 #${editingRegistration.value.id} 修改成功！`;
+
+        setTimeout(() => {
+          closeEditRegistrationModal();
+        }, 1500);
+      } catch (error) {
+        console.error("注册记录修改失败:", error);
+        registerError.value =
+          error.response?.data?.message || error.message || "修改失败，请重试";
+      } finally {
+        registerLoading.value = false;
+      }
     };
 
     // 打开批量注册模态框
@@ -957,7 +1611,7 @@ export default {
       sharedRegisterForm.value = {
         subnet: null,
         max_fee: null,
-        network: "",
+        network: "finney",
         start_time: "",
         end_time: "",
       };
@@ -968,7 +1622,7 @@ export default {
         batchRegisterForms.value[minerId] = {
           subnet: null,
           max_fee: null,
-          network: "",
+          network: "finney",
           start_time: "",
           end_time: "",
         };
@@ -989,7 +1643,7 @@ export default {
       sharedRegisterForm.value = {
         subnet: null,
         max_fee: null,
-        network: "",
+        network: "finney",
         start_time: "",
         end_time: "",
       };
@@ -1010,7 +1664,7 @@ export default {
           batchRegisterForms.value[minerId] = {
             subnet: sharedForm.subnet || null,
             max_fee: sharedForm.max_fee || null,
-            network: sharedForm.network || "",
+            network: sharedForm.network || "finney",
             start_time: sharedForm.start_time || "",
             end_time: sharedForm.end_time || "",
           };
@@ -1071,12 +1725,12 @@ export default {
         batchProgress.value = { current: 0, total: registrations.length };
 
         // 调用批量注册API
-        await api.post("/wallets/miners/batch", {
+        await api.post("/wallets/miners/registrations/batch", {
           registrations,
         });
 
-        // 注册成功
-        batchSuccessMessage.value = `成功注册 ${selectedMiners.value.length} 个矿工！`;
+        // 提交注册请求成功
+        batchSuccessMessage.value = `成功提交 ${selectedMiners.value.length} 个注册请求！`;
 
         // 刷新矿工列表
         await fetchAllMiners();
@@ -1115,7 +1769,7 @@ export default {
       registerForm.value = {
         subnet: null,
         max_fee: null,
-        network: "",
+        network: "finney",
         start_time: "",
         end_time: "",
       };
@@ -1133,6 +1787,7 @@ export default {
       showRegisterModal.value = false;
       selectedMiner.value = null;
       registerError.value = "";
+      registerSuccessMessage.value = "";
     };
 
     // 确认注册矿工
@@ -1141,6 +1796,7 @@ export default {
 
       registerLoading.value = true;
       registerError.value = "";
+      registerSuccessMessage.value = "";
 
       try {
         // 准备API数据
@@ -1164,7 +1820,7 @@ export default {
         }
 
         // 调用注册API
-        await api.post("/wallets/miners", apiData);
+        await api.post("/wallets/miners/registrations", apiData);
 
         // 注册成功后刷新数据
         await fetchAllMiners();
@@ -1175,11 +1831,12 @@ export default {
           wallet: selectedMiner.value.wallet,
         };
 
-        // 关闭模态框
-        closeRegisterModal();
+        // 显示成功提示
+        registerSuccessMessage.value = `提交 ${minerInfo.name} (${minerInfo.wallet}) 注册请求成功！`;
 
-        // 成功提示
-        alert(`矿工 ${minerInfo.name} (${minerInfo.wallet}) 注册成功！`);
+        setTimeout(() => {
+          closeRegisterModal();
+        }, 1500);
       } catch (error) {
         console.error("矿工注册失败:", error);
         registerError.value =
@@ -1233,6 +1890,7 @@ export default {
       selectedMiner,
       registerLoading,
       registerError,
+      registerSuccessMessage,
       registerForm,
       isFormValid,
       fieldErrors,
@@ -1250,6 +1908,34 @@ export default {
       isBatchFormValid,
       submitBatchRegister,
       onSharedParamsToggle,
+
+      // 注册记录操作相关
+      showEditRegistrationModal,
+      editingRegistration,
+      editingMiner,
+      editSuccessMessage,
+      editErrorMessage,
+      showConfirmModal,
+      confirmModalData,
+      confirmSuccessMessage,
+      confirmErrorMessage,
+      confirmLoading,
+      canEditRegistration,
+      canPauseRegistration,
+      canResumeRegistration,
+      canCancelRegistration,
+      canDeleteRegistration,
+      isRegistrationOperating,
+      editRegistration,
+      closeEditRegistrationModal,
+      confirmEditRegistration,
+      showConfirmationModal,
+      closeConfirmModal,
+      handleConfirmAction,
+      pauseRegistration,
+      resumeRegistration,
+      cancelRegistration,
+      deleteRegistration,
     };
   },
 };
@@ -1472,7 +2158,31 @@ export default {
   text-transform: uppercase;
 }
 
-.status-success {
+.status-pending {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.status-running {
+  background-color: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
+}
+
+.status-paused {
+  background-color: #ffeaa7;
+  color: #856404;
+  border: 1px solid #ffd32a;
+}
+
+.status-cancelled {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.status-completed {
   background-color: #d4edda;
   color: #155724;
   border: 1px solid #c3e6cb;
@@ -1482,12 +2192,6 @@ export default {
   background-color: #f8d7da;
   color: #721c24;
   border: 1px solid #f5c6cb;
-}
-
-.status-pending {
-  background-color: #fff3cd;
-  color: #856404;
-  border: 1px solid #ffeaa7;
 }
 
 .status-unknown {
@@ -2025,13 +2729,39 @@ export default {
   display: block;
 }
 
+/* 操作状态提示样式 - 与钱包管理组件保持一致 */
+.success-message {
+  color: #2ecc71;
+  font-size: 0.9rem;
+  margin-top: 1.5rem;
+  padding: 12px 15px;
+  background: rgba(46, 204, 113, 0.1);
+  border-radius: 8px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .error-message {
-  background-color: #f8d7da;
-  color: #721c24;
-  padding: 12px;
-  border-radius: 6px;
-  border: 1px solid #f5c6cb;
-  margin-top: 15px;
+  color: #e74c3c;
+  font-size: 0.9rem;
+  margin-top: 1.5rem;
+  padding: 12px 15px;
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: 8px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.success-icon,
+.error-icon {
+  font-size: 1rem;
+  font-weight: bold;
 }
 
 .modal-footer {
@@ -2324,6 +3054,280 @@ export default {
 
   .individual-params-list {
     max-height: 300px;
+  }
+}
+
+/* 注册记录操作按钮样式 */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.card-actions {
+  flex-shrink: 0;
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.action-btn i {
+  font-size: 10px;
+}
+
+/* 不同操作按钮的颜色 */
+.edit-btn {
+  background: #17a2b8;
+  color: white;
+}
+
+.edit-btn:hover:not(:disabled) {
+  background: #138496;
+}
+
+.pause-btn {
+  background: #ffc107;
+  color: #212529;
+}
+
+.pause-btn:hover:not(:disabled) {
+  background: #e0a800;
+}
+
+.resume-btn {
+  background: #28a745;
+  color: white;
+}
+
+.resume-btn:hover:not(:disabled) {
+  background: #218838;
+}
+
+.cancel-btn {
+  background: #fd7e14;
+  color: white;
+}
+
+.cancel-btn:hover:not(:disabled) {
+  background: #e8650e;
+}
+
+.delete-btn {
+  background: #dc3545;
+  color: white;
+}
+
+.delete-btn:hover:not(:disabled) {
+  background: #c82333;
+}
+
+/* 已完成和已取消状态的记录卡片灰化 */
+.registration-card.disabled {
+  opacity: 0.6;
+  background-color: #f8f9fa;
+}
+
+.registration-card.disabled .card-header {
+  background-color: #e9ecef;
+}
+
+.registration-card.disabled .card-body {
+  background-color: #f8f9fa;
+}
+
+/* 只读输入框样式 */
+.form-control.readonly {
+  background-color: #e9ecef;
+  cursor: not-allowed;
+}
+
+/* 全局消息提示样式 */
+.global-message {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  min-width: 300px;
+  max-width: 500px;
+}
+
+/* 操作按钮的加载状态 */
+.action-btn .spinner {
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s linear infinite;
+}
+
+/* 确认模态框样式 */
+.confirm-modal {
+  max-width: 500px;
+  width: 90%;
+}
+
+.confirm-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.confirm-icon {
+  margin-bottom: 20px;
+}
+
+.confirm-icon i {
+  font-size: 48px;
+}
+
+.confirm-icon-warning {
+  color: #ffc107;
+}
+
+.confirm-icon-success {
+  color: #28a745;
+}
+
+.confirm-icon-danger {
+  color: #dc3545;
+}
+
+.confirm-message {
+  margin-bottom: 20px;
+}
+
+.message-line {
+  margin: 8px 0;
+  line-height: 1.5;
+  color: #495057;
+}
+
+.message-line:empty {
+  margin: 4px 0;
+}
+
+/* 确认按钮样式 */
+.btn-warning {
+  background-color: #ffc107;
+  border-color: #ffc107;
+  color: #212529;
+}
+
+.btn-warning:hover {
+  background-color: #e0a800;
+  border-color: #d39e00;
+  color: #212529;
+}
+
+.btn-success {
+  background-color: #28a745;
+  border-color: #28a745;
+  color: #fff;
+}
+
+.btn-success:hover {
+  background-color: #218838;
+  border-color: #1e7e34;
+  color: #fff;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  border-color: #dc3545;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background-color: #c82333;
+  border-color: #bd2130;
+  color: #fff;
+}
+
+/* 模态框动画增强 */
+.confirm-modal {
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 响应式设计 - 操作按钮 */
+@media (max-width: 768px) {
+  .card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .action-buttons {
+    justify-content: flex-start;
+  }
+
+  .action-btn span {
+    display: none; /* 移动端只显示图标 */
+  }
+
+  .action-btn {
+    padding: 6px;
+    min-width: 28px;
+    justify-content: center;
+  }
+
+  .confirm-modal {
+    max-width: 95%;
+    margin: 20px;
+  }
+
+  .confirm-icon i {
+    font-size: 36px;
+  }
+
+  .confirm-content {
+    padding: 15px 0;
   }
 }
 </style>

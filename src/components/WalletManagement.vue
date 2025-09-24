@@ -857,6 +857,8 @@
                 <span class="success-icon" aria-hidden="true">✅</span>
                 <span>{{ passwordSuccessMessage }}</span>
               </div>
+            </transition>
+            <transition name="fade">
               <div v-if="passwordErrorMessage" class="error-message">
                 <span class="error-icon" aria-hidden="true">❌</span>
                 <span>{{ passwordErrorMessage }}</span>
@@ -1058,6 +1060,8 @@
                 <span class="success-icon" aria-hidden="true">✅</span>
                 <span>{{ batchSuccessMessage }}</span>
               </div>
+            </transition>
+            <transition name="fade">
               <div v-if="batchErrorMessage" class="error-message">
                 <span class="error-icon" aria-hidden="true">❌</span>
                 <span>{{ batchErrorMessage }}</span>
