@@ -214,7 +214,7 @@ export default {
           },
         });
 
-        transferRecords.value = response.data?.transfer_records || [];
+        transferRecords.value = response.data || [];
 
         // 解析分页头信息
         if (response.headers["x-pagination"]) {

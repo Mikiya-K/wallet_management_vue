@@ -340,7 +340,6 @@ export default {
     // 删除相关状态
     const isDeletingUser = ref(false);
     const showDeleteConfirmation = ref(false);
-    const deletingUserId = ref(null);
     const deletingUserName = ref("");
     const deleteError = ref("");
 
@@ -428,7 +427,8 @@ export default {
           },
         });
 
-        users.value = response.data.users || [];
+        // 后端直接返回用户数组
+        users.value = response.data || [];
         console.log("用户数据:", users.value);
 
         // 解析分页头信息
@@ -519,20 +519,22 @@ export default {
       }
     };
 
-    // 方法 - 下一页
-    const nextPage = () => {
-      if (currentPage.value < totalPages.value) {
-        currentPage.value++;
+    // 分页方法 - 参考转账历史组件
+    const goToPage = (page) => {
+      if (page >= 1 && page <= totalPages.value) {
+        currentPage.value = page;
         fetchUsers();
       }
     };
 
+    // 方法 - 下一页
+    const nextPage = () => {
+      goToPage(currentPage.value + 1);
+    };
+
     // 方法 - 上一页
     const prevPage = () => {
-      if (currentPage.value > 1) {
-        currentPage.value--;
-        fetchUsers();
-      }
+      goToPage(currentPage.value - 1);
     };
 
     // 方法 - 处理每页显示数量变化
@@ -543,7 +545,6 @@ export default {
 
     // 删除用户相关方法
     const confirmDeleteUser = (user) => {
-      deletingUserId.value = user.id;
       deletingUserName.value = user.name;
       deleteError.value = "";
       showDeleteConfirmation.value = true;
@@ -604,6 +605,7 @@ export default {
       updateUser,
       nextPage,
       prevPage,
+      goToPage,
       handlePageSizeChange,
       confirmDeleteUser,
       deleteUser,
