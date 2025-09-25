@@ -1395,10 +1395,16 @@ export default {
         max_fee: registration.max_fee,
         network: registration.network, // 只用于显示，不允许修改
         start_time: registration.start_time
-          ? new Date(registration.start_time).toISOString().slice(0, 16)
+          ? new Date(registration.start_time)
+              .toLocaleString("sv-SE")
+              .replace(" ", "T")
+              .slice(0, 16)
           : "",
         end_time: registration.end_time
-          ? new Date(registration.end_time).toISOString().slice(0, 16)
+          ? new Date(registration.end_time)
+              .toLocaleString("sv-SE")
+              .replace(" ", "T")
+              .slice(0, 16)
           : "",
       };
 
