@@ -17,7 +17,25 @@
 
       <div v-else>
         <div class="wallet-count-info">
-          Showing all {{ sortedMiners.length }} miners
+          <span>Showing all {{ sortedMiners.length }} miners</span>
+          <div class="global-controls">
+            <button
+              class="control-btn expand-all"
+              @click="expandAllColdkeys"
+              title="展开所有Coldkey"
+            >
+              <i class="fas fa-expand-arrows-alt"></i>
+              展开所有
+            </button>
+            <button
+              class="control-btn collapse-all"
+              @click="collapseAllColdkeys"
+              title="折叠所有Coldkey"
+            >
+              <i class="fas fa-compress-arrows-alt"></i>
+              折叠所有
+            </button>
+          </div>
         </div>
 
         <div class="table-scroll-container">
@@ -60,254 +78,336 @@
               </tr>
             </thead>
             <tbody>
-              <template v-for="miner in sortedMiners" :key="miner.id">
-                <!-- 主行：矿工基本信息 -->
+              <template
+                v-for="(miners, coldkeyName) in groupedMiners"
+                :key="coldkeyName"
+              >
+                <!-- Coldkey 分组行 -->
                 <tr
-                  class="miner-row"
-                  :class="{ expanded: isMinerExpanded(miner.id) }"
-                  @click="toggleMinerExpansion(miner.id)"
+                  class="coldkey-group-row"
+                  @click="toggleColdkeyCollapse(coldkeyName)"
                   :title="
-                    isMinerExpanded(miner.id)
-                      ? '点击收起注册记录'
-                      : '点击展开注册记录'
+                    isColdkeyCollapsed(coldkeyName)
+                      ? '点击展开此Coldkey下的矿工'
+                      : '点击折叠此Coldkey下的矿工'
                   "
                 >
                   <td class="checkbox-column" @click.stop>
                     <input
                       type="checkbox"
-                      :value="miner.id"
-                      v-model="selectedMiners"
-                      @change="updateSelectAllState"
+                      :checked="isColdkeySelected(coldkeyName)"
+                      :indeterminate="isColdkeyIndeterminate(coldkeyName)"
+                      @change="toggleColdkeySelection(coldkeyName)"
                       class="select-checkbox"
                     />
                   </td>
-                  <td>{{ miner.wallet }}</td>
-                  <td>{{ miner.name }}</td>
-                  <td class="address-cell">{{ miner.hotkey }}</td>
-                  <td class="actions-cell" @click.stop>
-                    <button
-                      class="register-btn"
-                      @click="registerMiner(miner)"
-                      :disabled="isRegistering(miner.id)"
-                    >
-                      <span
-                        v-if="isRegistering(miner.id)"
-                        class="spinner"
-                        aria-hidden="true"
-                      ></span>
-                      <span>{{
-                        isRegistering(miner.id) ? "注册中..." : "注册"
-                      }}</span>
-                    </button>
-                  </td>
-                </tr>
-
-                <!-- 展开行：注册记录 -->
-                <tr
-                  v-if="isMinerExpanded(miner.id)"
-                  class="registration-details-row"
-                >
-                  <td colspan="5" class="registration-details-cell">
-                    <div class="registration-records">
-                      <div
-                        v-if="
-                          !miner.registrations ||
-                          miner.registrations.length === 0
+                  <td colspan="4" class="coldkey-group-cell">
+                    <div class="coldkey-group-content">
+                      <i
+                        class="fas collapse-icon"
+                        :class="
+                          isColdkeyCollapsed(coldkeyName)
+                            ? 'fa-chevron-right'
+                            : 'fa-chevron-down'
                         "
-                        class="no-records"
+                      ></i>
+                      <strong class="coldkey-name">{{ coldkeyName }}</strong>
+                      <span class="miner-count"
+                        >({{ miners.length }} 个矿工)</span
                       >
-                        <i class="fas fa-info-circle"></i>
-                        <span>暂无注册记录</span>
-                      </div>
-                      <div v-else class="records-container">
-                        <div
-                          v-for="registration in miner.registrations
-                            .slice()
-                            .sort(
-                              (a, b) =>
-                                new Date(b.created_at) - new Date(a.created_at)
-                            )"
-                          :key="registration.id"
-                          class="registration-card"
-                          :class="{
-                            disabled: ['cancelled', 'completed'].includes(
-                              registration.task_status
-                            ),
-                          }"
+                      <div class="coldkey-actions" @click.stop>
+                        <button
+                          class="action-btn expand-all-btn"
+                          @click="expandAllMinersInColdkey(coldkeyName)"
+                          title="展开此Coldkey下所有矿工的注册记录"
+                          v-if="!isColdkeyCollapsed(coldkeyName)"
                         >
-                          <div class="card-header">
-                            <div class="status-info">
-                              <span
-                                class="status-badge"
-                                :class="getStatusInfo(registration).className"
-                              >
-                                {{ getStatusInfo(registration).text }}
-                              </span>
-                              <span class="registration-id"
-                                >#{{ registration.id }}</span
-                              >
-                            </div>
-                            <div class="card-actions">
-                              <div class="action-buttons">
-                                <!-- 编辑按钮 - pending、running、failed、paused状态可编辑 -->
-                                <button
-                                  v-if="canEditRegistration(registration)"
-                                  class="action-btn edit-btn"
-                                  @click="editRegistration(registration, miner)"
-                                  :disabled="
-                                    isRegistrationOperating(registration.id)
-                                  "
-                                  title="编辑注册记录"
-                                >
-                                  <span
-                                    v-if="
-                                      isRegistrationOperating(registration.id)
-                                    "
-                                    class="spinner"
-                                    aria-hidden="true"
-                                  ></span>
-                                  <i v-else class="fas fa-edit"></i>
-                                  <span>编辑</span>
-                                </button>
-
-                                <!-- 暂停按钮 - pending、running、failed状态可暂停 -->
-                                <button
-                                  v-if="canPauseRegistration(registration)"
-                                  class="action-btn pause-btn"
-                                  @click="pauseRegistration(registration)"
-                                  :disabled="
-                                    isRegistrationOperating(registration.id)
-                                  "
-                                  title="暂停注册"
-                                >
-                                  <span
-                                    v-if="
-                                      isRegistrationOperating(registration.id)
-                                    "
-                                    class="spinner"
-                                    aria-hidden="true"
-                                  ></span>
-                                  <i v-else class="fas fa-pause"></i>
-                                  <span>暂停</span>
-                                </button>
-
-                                <!-- 恢复按钮 - paused状态可恢复 -->
-                                <button
-                                  v-if="canResumeRegistration(registration)"
-                                  class="action-btn resume-btn"
-                                  @click="resumeRegistration(registration)"
-                                  :disabled="
-                                    isRegistrationOperating(registration.id)
-                                  "
-                                  title="恢复注册"
-                                >
-                                  <span
-                                    v-if="
-                                      isRegistrationOperating(registration.id)
-                                    "
-                                    class="spinner"
-                                    aria-hidden="true"
-                                  ></span>
-                                  <i v-else class="fas fa-play"></i>
-                                  <span>恢复</span>
-                                </button>
-
-                                <!-- 取消按钮 - pending、running、failed、paused状态可取消 -->
-                                <button
-                                  v-if="canCancelRegistration(registration)"
-                                  class="action-btn cancel-btn"
-                                  @click="cancelRegistration(registration)"
-                                  :disabled="
-                                    isRegistrationOperating(registration.id)
-                                  "
-                                  title="取消注册"
-                                >
-                                  <span
-                                    v-if="
-                                      isRegistrationOperating(registration.id)
-                                    "
-                                    class="spinner"
-                                    aria-hidden="true"
-                                  ></span>
-                                  <i v-else class="fas fa-stop"></i>
-                                  <span>取消</span>
-                                </button>
-
-                                <!-- 删除按钮 - 终态记录可删除 -->
-                                <button
-                                  v-if="canDeleteRegistration(registration)"
-                                  class="action-btn delete-btn"
-                                  @click="deleteRegistration(registration)"
-                                  :disabled="
-                                    isRegistrationOperating(registration.id)
-                                  "
-                                  title="删除记录"
-                                >
-                                  <span
-                                    v-if="
-                                      isRegistrationOperating(registration.id)
-                                    "
-                                    class="spinner"
-                                    aria-hidden="true"
-                                  ></span>
-                                  <i v-else class="fas fa-trash"></i>
-                                  <span>删除</span>
-                                </button>
-                              </div>
-                            </div>
-                            <div class="created-time">
-                              {{ formatDateTime(registration.created_at) }}
-                            </div>
-                          </div>
-                          <div class="card-body">
-                            <div class="info-grid">
-                              <div class="info-item">
-                                <label>网络:</label>
-                                <span>{{ registration.network }}</span>
-                              </div>
-                              <div class="info-item">
-                                <label>子网:</label>
-                                <span>{{ registration.subnet }}</span>
-                              </div>
-                              <div class="info-item">
-                                <label>UID:</label>
-                                <span>{{ registration.uid || "-" }}</span>
-                              </div>
-                              <div class="info-item">
-                                <label>最大费用:</label>
-                                <span>{{ registration.max_fee }}</span>
-                              </div>
-                              <div class="info-item">
-                                <label>开始时间:</label>
-                                <span>{{
-                                  formatDateTime(registration.start_time)
-                                }}</span>
-                              </div>
-                              <div class="info-item">
-                                <label>结束时间:</label>
-                                <span>{{
-                                  formatDateTime(registration.end_time)
-                                }}</span>
-                              </div>
-                              <div class="info-item">
-                                <label>注册时间:</label>
-                                <span>{{
-                                  formatDateTime(registration.registered_time)
-                                }}</span>
-                              </div>
-                              <div class="info-item">
-                                <label>注册状态:</label>
-                                <span>{{
-                                  registration.registered ? "已注册" : "未注册"
-                                }}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
+                          <i class="fas fa-expand-alt"></i>
+                        </button>
+                        <button
+                          class="action-btn collapse-all-btn"
+                          @click="collapseAllMinersInColdkey(coldkeyName)"
+                          title="折叠此Coldkey下所有矿工的注册记录"
+                          v-if="!isColdkeyCollapsed(coldkeyName)"
+                        >
+                          <i class="fas fa-compress-alt"></i>
+                        </button>
                       </div>
                     </div>
                   </td>
                 </tr>
+
+                <!-- 矿工行 - 只在Coldkey未折叠时显示 -->
+                <template v-for="miner in miners" :key="miner.id">
+                  <template v-if="!isColdkeyCollapsed(coldkeyName)">
+                    <!-- 主行：矿工基本信息 -->
+                    <tr
+                      class="miner-row"
+                      :class="{ expanded: isMinerExpanded(miner.id) }"
+                      @click="toggleMinerExpansion(miner.id)"
+                      :title="
+                        isMinerExpanded(miner.id)
+                          ? '点击收起注册记录'
+                          : '点击展开注册记录'
+                      "
+                    >
+                      <td class="checkbox-column" @click.stop>
+                        <input
+                          type="checkbox"
+                          :value="miner.id"
+                          v-model="selectedMiners"
+                          @change="updateSelectAllState"
+                          class="select-checkbox"
+                        />
+                      </td>
+                      <td class="miner-wallet-cell">{{ miner.wallet }}</td>
+                      <td>{{ miner.name }}</td>
+                      <td class="address-cell">{{ miner.hotkey }}</td>
+                      <td class="actions-cell" @click.stop>
+                        <button
+                          class="register-btn"
+                          @click="registerMiner(miner)"
+                          :disabled="isRegistering(miner.id)"
+                        >
+                          <span
+                            v-if="isRegistering(miner.id)"
+                            class="spinner"
+                            aria-hidden="true"
+                          ></span>
+                          <span>{{
+                            isRegistering(miner.id) ? "注册中..." : "注册"
+                          }}</span>
+                        </button>
+                      </td>
+                    </tr>
+
+                    <!-- 展开行：注册记录 -->
+                    <tr
+                      v-if="isMinerExpanded(miner.id)"
+                      class="registration-details-row"
+                    >
+                      <td colspan="5" class="registration-details-cell">
+                        <div class="registration-records">
+                          <div
+                            v-if="
+                              !miner.registrations ||
+                              miner.registrations.length === 0
+                            "
+                            class="no-records"
+                          >
+                            <i class="fas fa-info-circle"></i>
+                            <span>暂无注册记录</span>
+                          </div>
+                          <div v-else class="records-container">
+                            <div
+                              v-for="registration in miner.registrations
+                                .slice()
+                                .sort(
+                                  (a, b) =>
+                                    new Date(b.created_at) -
+                                    new Date(a.created_at)
+                                )"
+                              :key="registration.id"
+                              class="registration-card"
+                              :class="{
+                                disabled: ['cancelled', 'completed'].includes(
+                                  registration.task_status
+                                ),
+                              }"
+                            >
+                              <div class="card-header">
+                                <div class="status-info">
+                                  <span
+                                    class="status-badge"
+                                    :class="
+                                      getStatusInfo(registration).className
+                                    "
+                                  >
+                                    {{ getStatusInfo(registration).text }}
+                                  </span>
+                                  <span class="registration-id"
+                                    >#{{ registration.id }}</span
+                                  >
+                                </div>
+                                <div class="card-actions">
+                                  <div class="action-buttons">
+                                    <!-- 编辑按钮 - pending、running、failed、paused状态可编辑 -->
+                                    <button
+                                      v-if="canEditRegistration(registration)"
+                                      class="action-btn edit-btn"
+                                      @click="
+                                        editRegistration(registration, miner)
+                                      "
+                                      :disabled="
+                                        isRegistrationOperating(registration.id)
+                                      "
+                                      title="编辑注册记录"
+                                    >
+                                      <span
+                                        v-if="
+                                          isRegistrationOperating(
+                                            registration.id
+                                          )
+                                        "
+                                        class="spinner"
+                                        aria-hidden="true"
+                                      ></span>
+                                      <i v-else class="fas fa-edit"></i>
+                                      <span>编辑</span>
+                                    </button>
+
+                                    <!-- 暂停按钮 - pending、running、failed状态可暂停 -->
+                                    <button
+                                      v-if="canPauseRegistration(registration)"
+                                      class="action-btn pause-btn"
+                                      @click="pauseRegistration(registration)"
+                                      :disabled="
+                                        isRegistrationOperating(registration.id)
+                                      "
+                                      title="暂停注册"
+                                    >
+                                      <span
+                                        v-if="
+                                          isRegistrationOperating(
+                                            registration.id
+                                          )
+                                        "
+                                        class="spinner"
+                                        aria-hidden="true"
+                                      ></span>
+                                      <i v-else class="fas fa-pause"></i>
+                                      <span>暂停</span>
+                                    </button>
+
+                                    <!-- 恢复按钮 - paused状态可恢复 -->
+                                    <button
+                                      v-if="canResumeRegistration(registration)"
+                                      class="action-btn resume-btn"
+                                      @click="resumeRegistration(registration)"
+                                      :disabled="
+                                        isRegistrationOperating(registration.id)
+                                      "
+                                      title="恢复注册"
+                                    >
+                                      <span
+                                        v-if="
+                                          isRegistrationOperating(
+                                            registration.id
+                                          )
+                                        "
+                                        class="spinner"
+                                        aria-hidden="true"
+                                      ></span>
+                                      <i v-else class="fas fa-play"></i>
+                                      <span>恢复</span>
+                                    </button>
+
+                                    <!-- 取消按钮 - pending、running、failed、paused状态可取消 -->
+                                    <button
+                                      v-if="canCancelRegistration(registration)"
+                                      class="action-btn cancel-btn"
+                                      @click="cancelRegistration(registration)"
+                                      :disabled="
+                                        isRegistrationOperating(registration.id)
+                                      "
+                                      title="取消注册"
+                                    >
+                                      <span
+                                        v-if="
+                                          isRegistrationOperating(
+                                            registration.id
+                                          )
+                                        "
+                                        class="spinner"
+                                        aria-hidden="true"
+                                      ></span>
+                                      <i v-else class="fas fa-stop"></i>
+                                      <span>取消</span>
+                                    </button>
+
+                                    <!-- 删除按钮 - 终态记录可删除 -->
+                                    <button
+                                      v-if="canDeleteRegistration(registration)"
+                                      class="action-btn delete-btn"
+                                      @click="deleteRegistration(registration)"
+                                      :disabled="
+                                        isRegistrationOperating(registration.id)
+                                      "
+                                      title="删除记录"
+                                    >
+                                      <span
+                                        v-if="
+                                          isRegistrationOperating(
+                                            registration.id
+                                          )
+                                        "
+                                        class="spinner"
+                                        aria-hidden="true"
+                                      ></span>
+                                      <i v-else class="fas fa-trash"></i>
+                                      <span>删除</span>
+                                    </button>
+                                  </div>
+                                </div>
+                                <div class="created-time">
+                                  {{ formatDateTime(registration.created_at) }}
+                                </div>
+                              </div>
+                              <div class="card-body">
+                                <div class="info-grid">
+                                  <div class="info-item">
+                                    <label>网络:</label>
+                                    <span>{{ registration.network }}</span>
+                                  </div>
+                                  <div class="info-item">
+                                    <label>子网:</label>
+                                    <span>{{ registration.subnet }}</span>
+                                  </div>
+                                  <div class="info-item">
+                                    <label>UID:</label>
+                                    <span>{{ registration.uid || "-" }}</span>
+                                  </div>
+                                  <div class="info-item">
+                                    <label>最大费用:</label>
+                                    <span>{{ registration.max_fee }}</span>
+                                  </div>
+                                  <div class="info-item">
+                                    <label>开始时间:</label>
+                                    <span>{{
+                                      formatDateTime(registration.start_time)
+                                    }}</span>
+                                  </div>
+                                  <div class="info-item">
+                                    <label>结束时间:</label>
+                                    <span>{{
+                                      formatDateTime(registration.end_time)
+                                    }}</span>
+                                  </div>
+                                  <div class="info-item">
+                                    <label>注册时间:</label>
+                                    <span>{{
+                                      formatDateTime(
+                                        registration.registered_time
+                                      )
+                                    }}</span>
+                                  </div>
+                                  <div class="info-item">
+                                    <label>注册状态:</label>
+                                    <span>{{
+                                      registration.registered
+                                        ? "已注册"
+                                        : "未注册"
+                                    }}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                </template>
               </template>
             </tbody>
             <!-- 合计行 -->
@@ -1014,6 +1114,9 @@ export default {
     // 展开状态管理
     const expandedMiners = ref(new Set());
 
+    // Coldkey折叠状态管理
+    const collapsedColdkeys = ref(new Set());
+
     // 批量操作相关状态
     const batchLoading = ref(false);
     const isAllSelected = ref(false);
@@ -1223,6 +1326,34 @@ export default {
       return minersCopy;
     });
 
+    // 按Coldkey分组的矿工列表
+    const groupedMiners = computed(() => {
+      const groups = {};
+      sortedMiners.value.forEach((miner) => {
+        const coldkey = miner.wallet || "Unknown";
+        if (!groups[coldkey]) {
+          groups[coldkey] = [];
+        }
+        groups[coldkey].push(miner);
+      });
+
+      // 按coldkey名称排序分组
+      const sortedGroups = {};
+      Object.keys(groups)
+        .sort((a, b) => {
+          if (sortDirection.value === "asc") {
+            return a.localeCompare(b);
+          } else {
+            return b.localeCompare(a);
+          }
+        })
+        .forEach((key) => {
+          sortedGroups[key] = groups[key];
+        });
+
+      return sortedGroups;
+    });
+
     // 获取所有矿工
     const fetchAllMiners = async () => {
       loading.value = true;
@@ -1296,6 +1427,88 @@ export default {
     // 检查矿工是否已展开
     const isMinerExpanded = (minerId) => {
       return expandedMiners.value.has(minerId);
+    };
+
+    // Coldkey折叠相关方法
+    const toggleColdkeyCollapse = (coldkeyName) => {
+      const collapsed = collapsedColdkeys.value;
+      if (collapsed.has(coldkeyName)) {
+        collapsed.delete(coldkeyName);
+      } else {
+        collapsed.add(coldkeyName);
+      }
+      collapsedColdkeys.value = new Set(collapsed);
+    };
+
+    const isColdkeyCollapsed = (coldkeyName) => {
+      return collapsedColdkeys.value.has(coldkeyName);
+    };
+
+    // Coldkey选择相关方法
+    const isColdkeySelected = (coldkeyName) => {
+      const miners = groupedMiners.value[coldkeyName] || [];
+      if (miners.length === 0) return false;
+      return miners.every((miner) => selectedMiners.value.includes(miner.id));
+    };
+
+    const isColdkeyIndeterminate = (coldkeyName) => {
+      const miners = groupedMiners.value[coldkeyName] || [];
+      if (miners.length === 0) return false;
+      const selectedCount = miners.filter((miner) =>
+        selectedMiners.value.includes(miner.id)
+      ).length;
+      return selectedCount > 0 && selectedCount < miners.length;
+    };
+
+    const toggleColdkeySelection = (coldkeyName) => {
+      const miners = groupedMiners.value[coldkeyName] || [];
+      const isSelected = isColdkeySelected(coldkeyName);
+
+      if (isSelected) {
+        // 取消选择该coldkey下的所有矿工
+        miners.forEach((miner) => {
+          const index = selectedMiners.value.indexOf(miner.id);
+          if (index > -1) {
+            selectedMiners.value.splice(index, 1);
+          }
+        });
+      } else {
+        // 选择该coldkey下的所有矿工
+        miners.forEach((miner) => {
+          if (!selectedMiners.value.includes(miner.id)) {
+            selectedMiners.value.push(miner.id);
+          }
+        });
+      }
+      updateSelectAllState();
+    };
+
+    // 展开/折叠某个Coldkey下的所有矿工注册记录
+    const expandAllMinersInColdkey = (coldkeyName) => {
+      const miners = groupedMiners.value[coldkeyName] || [];
+      miners.forEach((miner) => {
+        expandedMiners.value.add(miner.id);
+      });
+      expandedMiners.value = new Set(expandedMiners.value);
+    };
+
+    const collapseAllMinersInColdkey = (coldkeyName) => {
+      const miners = groupedMiners.value[coldkeyName] || [];
+      miners.forEach((miner) => {
+        expandedMiners.value.delete(miner.id);
+      });
+      expandedMiners.value = new Set(expandedMiners.value);
+    };
+
+    // 全局Coldkey控制方法
+    const expandAllColdkeys = () => {
+      collapsedColdkeys.value.clear();
+      collapsedColdkeys.value = new Set();
+    };
+
+    const collapseAllColdkeys = () => {
+      const allColdkeys = Object.keys(groupedMiners.value);
+      collapsedColdkeys.value = new Set(allColdkeys);
     };
 
     // 格式化时间
@@ -1868,6 +2081,7 @@ export default {
 
       // 计算属性
       sortedMiners,
+      groupedMiners,
       isAllSelected,
 
       // 方法
@@ -1882,6 +2096,18 @@ export default {
       expandedMiners,
       toggleMinerExpansion,
       isMinerExpanded,
+
+      // Coldkey相关方法
+      collapsedColdkeys,
+      toggleColdkeyCollapse,
+      isColdkeyCollapsed,
+      isColdkeySelected,
+      isColdkeyIndeterminate,
+      toggleColdkeySelection,
+      expandAllMinersInColdkey,
+      collapseAllMinersInColdkey,
+      expandAllColdkeys,
+      collapseAllColdkeys,
       formatDateTime,
       getStatusInfo,
       openBatchRegisterModal,
@@ -2013,12 +2239,57 @@ export default {
 }
 
 .wallet-count-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   padding: 20px 25px;
   background: #f8f9fa;
   border-bottom: 1px solid #e9ecef;
   font-weight: 500;
   color: #495057;
   font-size: 14px;
+}
+
+.global-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.control-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.control-btn:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+.control-btn.expand-all {
+  background: #28a745;
+}
+
+.control-btn.expand-all:hover {
+  background: #1e7e34;
+}
+
+.control-btn.collapse-all {
+  background: #6c757d;
+}
+
+.control-btn.collapse-all:hover {
+  background: #545b62;
 }
 
 .table-scroll-container {
@@ -2089,6 +2360,79 @@ export default {
 
 .miner-row.expanded:hover::after {
   content: "点击收起注册记录";
+}
+
+/* Coldkey分组行样式 */
+.coldkey-group-row {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.coldkey-group-row:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.coldkey-group-cell {
+  padding: 16px 12px !important;
+  border-bottom: 2px solid #dee2e6 !important;
+}
+
+.coldkey-group-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.collapse-icon {
+  font-size: 14px;
+  transition: transform 0.3s ease;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.coldkey-name {
+  font-size: 16px;
+  color: white;
+}
+
+.miner-count {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: normal;
+}
+
+.coldkey-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.coldkey-actions .action-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.coldkey-actions .action-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+/* 矿工行在分组下的样式调整 */
+.miner-wallet-cell {
+  padding-left: 24px !important;
+  color: #6c757d;
+  font-size: 13px;
 }
 
 /* 注册记录详情行 */
