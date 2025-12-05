@@ -16,6 +16,8 @@
       </div>
 
       <div v-else>
+        <div class="content-layout">
+          <div class="main-content">
         <div class="wallet-count-info">
           <span>Showing all {{ sortedMiners.length }} miners</span>
           <div class="global-controls">
@@ -451,6 +453,62 @@
             </div>
           </div>
         </transition>
+          </div>
+
+          <aside class="status-sidebar">
+            <h3 class="status-title">
+              <i class="fas fa-clipboard-list"></i>
+              Registration Status
+            </h3>
+
+            <div v-if="statusLoading" class="status-loading">
+              <div class="spinner"></div>
+              <span>Loading overview...</span>
+            </div>
+            <div v-else>
+              <div
+                v-for="status in statusOrder"
+                :key="status"
+                class="status-card"
+                :class="status"
+              >
+                <div class="status-card-header" @click="toggleStatusExpand(status)">
+                  <div class="status-labels">
+                    <span class="status-name">{{ status }}</span>
+                    <span class="status-count">{{
+                      statusOverview[status]?.count || 0
+                    }}</span>
+                  </div>
+                  <i
+                    class="fas"
+                    :class="isStatusExpanded(status) ? 'fa-chevron-up' : 'fa-chevron-down'"
+                  ></i>
+                </div>
+                <transition name="fade">
+                  <div v-if="isStatusExpanded(status)" class="status-items">
+                    <div
+                      v-if="(statusOverview[status]?.items || []).length === 0"
+                      class="no-items"
+                    >
+                      <i class="fas fa-info-circle"></i>
+                      <span>No miners</span>
+                    </div>
+                    <ul v-else>
+                      <li
+                        v-for="item in statusOverview[status].items"
+                        :key="`${status}-${item.miner_id}`"
+                        class="status-item"
+                      >
+                        <div class="item-name">{{ item.hotkey_name }}</div>
+                        <div class="item-address">{{ item.hotkey_address }}</div>
+                      </li>
+                    </ul>
+                  </div>
+                </transition>
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
 
@@ -1120,6 +1178,24 @@ export default {
     // Coldkey折叠状态管理
     const collapsedColdkeys = ref(new Set());
 
+    // 注册状态汇总
+    const statusOrder = [
+      "pending",
+      "running",
+      "paused",
+      "cancelled",
+      "completed",
+      "failed",
+    ];
+    const createEmptyOverview = () =>
+      statusOrder.reduce((acc, key) => {
+        acc[key] = { count: 0, items: [] };
+        return acc;
+      }, {});
+    const statusOverview = ref(createEmptyOverview());
+    const statusLoading = ref(false);
+    const expandedStatuses = ref(new Set(statusOrder));
+
     // 批量操作相关状态
     const batchLoading = ref(false);
     const isAllSelected = ref(false);
@@ -1379,6 +1455,38 @@ export default {
       return balance;
     };
 
+    // 获取注册状态汇总
+    const fetchStatusOverview = async () => {
+      statusLoading.value = true;
+      try {
+        const response = await api.get(
+          "/wallets/miners/registrations/status-summary"
+        );
+        statusOverview.value = {
+          ...createEmptyOverview(),
+          ...response.data,
+        };
+      } catch (error) {
+        console.error("Failed to fetch registration status overview:", error);
+      } finally {
+        statusLoading.value = false;
+      }
+    };
+
+    const toggleStatusExpand = (status) => {
+      const expanded = new Set(expandedStatuses.value);
+      if (expanded.has(status)) {
+        expanded.delete(status);
+      } else {
+        expanded.add(status);
+      }
+      expandedStatuses.value = expanded;
+    };
+
+    const isStatusExpanded = (status) => {
+      return expandedStatuses.value.has(status);
+    };
+
     // 获取所有矿工
     const fetchAllMiners = async () => {
       loading.value = true;
@@ -1392,6 +1500,7 @@ export default {
         });
 
         allMiners.value = response.data;
+        await fetchStatusOverview();
       } catch (error) {
         console.error("Failed to fetch hotkey data:", error);
       } finally {
@@ -2102,6 +2211,9 @@ export default {
       selectedMiners,
       sortField,
       sortDirection,
+      statusOverview,
+      statusOrder,
+      statusLoading,
       batchLoading,
 
       // 计算属性
@@ -2112,6 +2224,7 @@ export default {
 
       // 方法
       fetchAllMiners,
+      fetchStatusOverview,
       toggleSort,
       getSortIcon,
       toggleSelectAll,
@@ -2134,6 +2247,8 @@ export default {
       collapseAllMinersInColdkey,
       expandAllColdkeys,
       collapseAllColdkeys,
+      toggleStatusExpand,
+      isStatusExpanded,
       formatColdkeyBalance,
       formatDateTime,
       getStatusInfo,
@@ -2238,6 +2353,163 @@ export default {
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   overflow: hidden;
+}
+
+.content-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.main-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.status-sidebar {
+  width: 320px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 16px;
+  border: 1px solid #e9ecef;
+  position: sticky;
+  top: 20px;
+}
+
+.status-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0 0 12px 0;
+}
+
+.status-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.status-card {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid #e9ecef;
+  border-left: 4px solid #007bff;
+}
+
+.status-card.pending {
+  border-left-color: #f0ad4e;
+}
+
+.status-card.running {
+  border-left-color: #17a2b8;
+}
+
+.status-card.paused {
+  border-left-color: #ffc107;
+}
+
+.status-card.cancelled {
+  border-left-color: #6c757d;
+}
+
+.status-card.completed {
+  border-left-color: #28a745;
+}
+
+.status-card.failed {
+  border-left-color: #dc3545;
+}
+
+.status-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: #2c3e50;
+}
+
+.status-labels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-name {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.status-count {
+  display: inline-block;
+  min-width: 32px;
+  padding: 4px 8px;
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 999px;
+  font-weight: 600;
+  color: #2c3e50;
+  text-align: center;
+  font-size: 12px;
+}
+
+.status-items {
+  margin-top: 10px;
+}
+
+.status-items ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-item {
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.status-item .item-name {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 4px;
+}
+
+.status-item .item-address {
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  color: #6c757d;
+  word-break: break-all;
+}
+
+.no-items {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6c757d;
+  font-size: 13px;
+}
+
+@media (max-width: 992px) {
+  .content-layout {
+    flex-direction: column;
+  }
+
+  .status-sidebar {
+    width: 100%;
+    position: static;
+  }
 }
 
 .loading-indicator {
