@@ -112,6 +112,9 @@
                         "
                       ></i>
                       <strong class="coldkey-name">{{ coldkeyName }}</strong>
+                      <span class="coldkey-balance">
+                        Free Balance: {{ formatColdkeyBalance(coldkeyName) }}
+                      </span>
                       <span class="miner-count"
                         >({{ miners.length }} 个矿工)</span
                       >
@@ -1354,6 +1357,28 @@ export default {
       return sortedGroups;
     });
 
+    // 每个 coldkey 的自由余额
+    const coldkeyBalances = computed(() => {
+      const balances = {};
+      Object.entries(groupedMiners.value).forEach(([coldkey, miners]) => {
+        const balanceMiner = miners.find(
+          (m) =>
+            m.coldkey_free_balance !== undefined &&
+            m.coldkey_free_balance !== null
+        );
+        balances[coldkey] = balanceMiner
+          ? balanceMiner.coldkey_free_balance
+          : null;
+      });
+      return balances;
+    });
+
+    const formatColdkeyBalance = (coldkeyName) => {
+      const balance = coldkeyBalances.value[coldkeyName];
+      if (balance === null || balance === undefined) return "N/A";
+      return balance;
+    };
+
     // 获取所有矿工
     const fetchAllMiners = async () => {
       loading.value = true;
@@ -2082,6 +2107,7 @@ export default {
       // 计算属性
       sortedMiners,
       groupedMiners,
+      coldkeyBalances,
       isAllSelected,
 
       // 方法
@@ -2108,6 +2134,7 @@ export default {
       collapseAllMinersInColdkey,
       expandAllColdkeys,
       collapseAllColdkeys,
+      formatColdkeyBalance,
       formatDateTime,
       getStatusInfo,
       openBatchRegisterModal,
@@ -2404,6 +2431,14 @@ export default {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.8);
   font-weight: normal;
+}
+
+.coldkey-balance {
+  font-size: 13px;
+  color: #e3f2fd;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 4px 10px;
+  border-radius: 12px;
 }
 
 .coldkey-actions {
