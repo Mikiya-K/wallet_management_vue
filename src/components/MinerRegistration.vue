@@ -147,6 +147,7 @@
                   <template v-if="!isColdkeyCollapsed(coldkeyName)">
                     <!-- 主行：矿工基本信息 -->
                     <tr
+                      :id="'miner-row-' + miner.id"
                       class="miner-row"
                       :class="{ expanded: isMinerExpanded(miner.id) }"
                       @click="toggleMinerExpansion(miner.id)"
@@ -213,6 +214,7 @@
                                     new Date(a.created_at)
                                 )"
                               :key="registration.id"
+                              :id="'registration-card-' + registration.id"
                               class="registration-card"
                               :class="{
                                 disabled: ['cancelled', 'completed'].includes(
@@ -498,6 +500,7 @@
                         v-for="item in statusOverview[status].items"
                         :key="`${status}-${item.miner_id}`"
                         class="status-item"
+                        @click="jumpToStatusRecord(status, item.miner_id)"
                       >
                         <div class="item-name">{{ item.hotkey_name }}</div>
                         <div class="item-address">{{ item.hotkey_address }}</div>
@@ -505,6 +508,73 @@
                     </ul>
                   </div>
                 </transition>
+              </div>
+            </div>
+
+            <div class="history-section">
+              <h3 class="history-title">
+                <i class="fas fa-clock"></i>
+                Submitted Registrations
+              </h3>
+
+              <div class="history-meta">
+                <span class="history-count"
+                  >{{ registrationHistory.length }} records</span
+                >
+                <button
+                  v-if="registrationHistory.length > registrationHistoryLimit"
+                  type="button"
+                  class="history-toggle"
+                  @click="
+                    showAllRegistrationHistory = !showAllRegistrationHistory
+                  "
+                >
+                  {{ showAllRegistrationHistory ? "Show Less" : "Show All" }}
+                </button>
+              </div>
+
+              <div class="history-list">
+                <div v-if="registrationHistory.length === 0" class="no-items">
+                  <i class="fas fa-info-circle"></i>
+                  <span>No records</span>
+                </div>
+                <ul v-else>
+                  <li
+                    v-for="record in displayedRegistrationHistory"
+                    :key="`${record.miner_id}-${record.id}`"
+                    class="history-item"
+                    @click="jumpToRegistrationCard(record.miner_id, record.id)"
+                  >
+                    <div class="history-item-header">
+                      <span
+                        class="status-badge"
+                        :class="getStatusInfo(record).className"
+                      >
+                        {{ record.task_status || "unknown" }}
+                      </span>
+                      <span class="history-reg-id">#{{ record.id }}</span>
+                    </div>
+                    <div class="history-item-body">
+                      <div class="history-hotkey">
+                        {{ record.hotkey_name }}
+                        <span class="history-coldkey"
+                          >({{ record.coldkey_name }})</span
+                        >
+                      </div>
+                      <div class="history-address">
+                        {{ record.hotkey_address }}
+                      </div>
+                      <div class="history-params">
+                        <span>{{ record.network }}</span>
+                        <span>subnet {{ record.subnet }}</span>
+                        <span>max_fee {{ record.max_fee }}</span>
+                      </div>
+                      <div class="history-time">
+                        {{ formatDateTime(record.created_at) }}
+                      </div>
+                    </div>
+                  </li>
+                </ul>
               </div>
             </div>
           </aside>
@@ -1159,7 +1229,7 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, nextTick } from "vue";
 import api from "@/utils/api";
 
 export default {
@@ -1194,7 +1264,11 @@ export default {
       }, {});
     const statusOverview = ref(createEmptyOverview());
     const statusLoading = ref(false);
-    const expandedStatuses = ref(new Set(statusOrder));
+    const expandedStatuses = ref(new Set());
+
+    // 提交的注册记录（侧边栏时间倒序展示）
+    const registrationHistoryLimit = 30;
+    const showAllRegistrationHistory = ref(false);
 
     // 批量操作相关状态
     const batchLoading = ref(false);
@@ -1455,6 +1529,47 @@ export default {
       return balance;
     };
 
+    const toTimestamp = (value) => {
+      if (!value) return 0;
+      const timestamp = new Date(value).getTime();
+      return Number.isFinite(timestamp) ? timestamp : 0;
+    };
+
+    // 按提交时间倒序的注册记录列表（扁平化）
+    const registrationHistory = computed(() => {
+      const records = [];
+
+      (allMiners.value || []).forEach((miner) => {
+        const registrations = Array.isArray(miner.registrations)
+          ? miner.registrations
+          : [];
+
+        registrations.forEach((registration) => {
+          records.push({
+            ...registration,
+            miner_id: miner.id,
+            hotkey_name: miner.name,
+            hotkey_address: miner.hotkey,
+            coldkey_name: miner.wallet,
+          });
+        });
+      });
+
+      records.sort((a, b) => {
+        const timeDiff =
+          toTimestamp(b.created_at) - toTimestamp(a.created_at);
+        if (timeDiff !== 0) return timeDiff;
+        return (b.id ?? 0) - (a.id ?? 0);
+      });
+
+      return records;
+    });
+
+    const displayedRegistrationHistory = computed(() => {
+      if (showAllRegistrationHistory.value) return registrationHistory.value;
+      return registrationHistory.value.slice(0, registrationHistoryLimit);
+    });
+
     // 获取注册状态汇总
     const fetchStatusOverview = async () => {
       statusLoading.value = true;
@@ -1487,6 +1602,79 @@ export default {
       return expandedStatuses.value.has(status);
     };
 
+    const ensureColdkeyExpanded = (coldkeyName) => {
+      if (!coldkeyName) return;
+      if (!collapsedColdkeys.value.has(coldkeyName)) return;
+
+      const next = new Set(collapsedColdkeys.value);
+      next.delete(coldkeyName);
+      collapsedColdkeys.value = next;
+    };
+
+    const ensureMinerExpanded = (minerId) => {
+      if (!minerId) return;
+      if (expandedMiners.value.has(minerId)) return;
+
+      const next = new Set(expandedMiners.value);
+      next.add(minerId);
+      expandedMiners.value = next;
+    };
+
+    const scrollToElement = async (elementId) => {
+      if (!elementId) return;
+      await nextTick();
+      const element = document.getElementById(elementId);
+      if (!element) return;
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+
+    const jumpToRegistrationCard = async (minerId, registrationId) => {
+      const miner = (allMiners.value || []).find((m) => m.id === minerId);
+      if (!miner) return;
+
+      const coldkeyName = miner.wallet || "Unknown";
+      ensureColdkeyExpanded(coldkeyName);
+      ensureMinerExpanded(minerId);
+
+      const targetId = registrationId
+        ? `registration-card-${registrationId}`
+        : `miner-row-${minerId}`;
+      await scrollToElement(targetId);
+    };
+
+    const jumpToStatusRecord = async (status, minerId) => {
+      const miner = (allMiners.value || []).find((m) => m.id === minerId);
+      if (!miner) return;
+
+      const coldkeyName = miner.wallet || "Unknown";
+      ensureColdkeyExpanded(coldkeyName);
+      ensureMinerExpanded(minerId);
+
+      const statusKey = (status || "").toLowerCase();
+      const registrations = Array.isArray(miner.registrations)
+        ? miner.registrations
+        : [];
+
+      const candidates = registrations.filter(
+        (r) => (r.task_status || "").toLowerCase() === statusKey
+      );
+
+      let targetRegistrationId = null;
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => {
+          const timeDiff = toTimestamp(b.created_at) - toTimestamp(a.created_at);
+          if (timeDiff !== 0) return timeDiff;
+          return (b.id ?? 0) - (a.id ?? 0);
+        });
+        targetRegistrationId = candidates[0].id;
+      }
+
+      const targetId = targetRegistrationId
+        ? `registration-card-${targetRegistrationId}`
+        : `miner-row-${minerId}`;
+      await scrollToElement(targetId);
+    };
+
     // 获取所有矿工
     const fetchAllMiners = async () => {
       loading.value = true;
@@ -1500,7 +1688,7 @@ export default {
         });
 
         allMiners.value = response.data;
-        await fetchStatusOverview();
+        fetchStatusOverview();
       } catch (error) {
         console.error("Failed to fetch hotkey data:", error);
       } finally {
@@ -2214,6 +2402,10 @@ export default {
       statusOverview,
       statusOrder,
       statusLoading,
+      registrationHistory,
+      displayedRegistrationHistory,
+      showAllRegistrationHistory,
+      registrationHistoryLimit,
       batchLoading,
 
       // 计算属性
@@ -2249,6 +2441,8 @@ export default {
       collapseAllColdkeys,
       toggleStatusExpand,
       isStatusExpanded,
+      jumpToStatusRecord,
+      jumpToRegistrationCard,
       formatColdkeyBalance,
       formatDateTime,
       getStatusInfo,
@@ -2395,6 +2589,15 @@ export default {
   font-size: 14px;
 }
 
+.status-loading .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0, 123, 255, 0.2);
+  border-radius: 50%;
+  border-top-color: #007bff;
+  animation: spin 1s linear infinite;
+}
+
 .status-card {
   background: #f8f9fa;
   border-radius: 10px;
@@ -2478,6 +2681,14 @@ export default {
   border: 1px solid #e9ecef;
   border-radius: 8px;
   padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.status-item:hover {
+  border-color: #cfd4da;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
 }
 
 .status-item .item-name {
@@ -2499,6 +2710,134 @@ export default {
   gap: 6px;
   color: #6c757d;
   font-size: 13px;
+}
+
+.history-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e9ecef;
+}
+
+.history-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0 0 10px 0;
+}
+
+.history-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.history-toggle {
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #007bff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-toggle:hover {
+  background: #f8f9fa;
+  border-color: #cfd4da;
+}
+
+.history-list {
+  margin-top: 10px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.history-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item {
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-item:hover {
+  border-color: #cfd4da;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.history-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.history-reg-id {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6c757d;
+}
+
+.history-hotkey {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 6px;
+}
+
+.history-coldkey {
+  font-weight: normal;
+  color: #6c757d;
+  margin-left: 4px;
+}
+
+.history-address {
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  color: #6c757d;
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+.history-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #495057;
+}
+
+.history-params span {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.history-time {
+  font-size: 12px;
+  color: #6c757d;
 }
 
 @media (max-width: 992px) {
